@@ -1,0 +1,2 @@
+/usr/bin/ar qc libimcoolbar.a CMakeFiles/imcoolbar.dir/ImCoolBar/ImCoolBar/ImCoolbar.cpp.o
+/usr/bin/ranlib libimcoolbar.a

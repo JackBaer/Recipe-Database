@@ -1,0 +1,2 @@
+/usr/bin/ar qc libnvg_imgui.a CMakeFiles/nvg_imgui.dir/nanovg/nvg_imgui/nvg_cpp_text.cpp.o CMakeFiles/nvg_imgui.dir/nanovg/nvg_imgui/nvg_imgui.cpp.o
+/usr/bin/ranlib libnvg_imgui.a

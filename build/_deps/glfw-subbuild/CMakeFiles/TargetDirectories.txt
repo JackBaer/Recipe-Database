@@ -1,0 +1,3 @@
+/Users/jackbaer/Desktop/Recipe-Database/build/_deps/glfw-subbuild/CMakeFiles/glfw-populate.dir
+/Users/jackbaer/Desktop/Recipe-Database/build/_deps/glfw-subbuild/CMakeFiles/edit_cache.dir
+/Users/jackbaer/Desktop/Recipe-Database/build/_deps/glfw-subbuild/CMakeFiles/rebuild_cache.dir
