@@ -11,6 +11,96 @@ std::vector<std::string> ingredients;
 std::vector<std::string> directions;
 
 
+std::string read_csv_record(std::ifstream& file) {
+    std::string line, record;
+    bool in_quotes = false;
+
+    while (std::getline(file, line)) {
+        if (!record.empty()) record += "\n";
+        record += line;
+
+        int quote_count = 0;
+        for (size_t i = 0; i < line.size(); ++i) {
+            if (line[i] == '"') {
+                if (i + 1 < line.size() && line[i + 1] == '"') {
+                    ++i; // escaped quote
+                } else {
+                    in_quotes = !in_quotes;
+                }
+            }
+        }
+
+        if (!in_quotes) break; // full record captured
+    }
+
+    return record;
+}
+
+std::vector<std::string> parse_csv_line(const std::string& line) {
+    std::vector<std::string> result;
+    std::string field;
+    bool in_quotes = false;
+
+    for (size_t i = 0; i < line.size(); ++i) {
+        char c = line[i];
+
+        if (c == '"') {
+            if (in_quotes && i + 1 < line.size() && line[i + 1] == '"') {
+                field += '"'; // escaped quote
+                ++i;
+            } else {
+                in_quotes = !in_quotes;
+            }
+        } else if (c == ',' && !in_quotes) {
+            result.push_back(field);
+            field.clear();
+        } else {
+            field += c;
+        }
+    }
+    result.push_back(field);
+    return result;
+}
+
+void load_recipes(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file: " << filename << "\n";
+        return;
+    }
+
+    // Read and parse header
+    std::string header_line = read_csv_record(file);
+    std::vector<std::string> headers = parse_csv_line(header_line);
+
+    int name_idx = -1, ingredients_idx = -1, directions_idx = -1;
+    for (size_t i = 0; i < headers.size(); ++i) {
+        if (headers[i] == "recipe_name") name_idx = i;
+        else if (headers[i] == "ingredients") ingredients_idx = i;
+        else if (headers[i] == "directions") directions_idx = i;
+    }
+
+    if (name_idx == -1 || ingredients_idx == -1 || directions_idx == -1) {
+        std::cerr << "Required columns not found\n";
+        return;
+    }
+
+    while (file) {
+        std::string record = read_csv_record(file);
+        if (record.empty()) continue;
+
+        std::vector<std::string> fields = parse_csv_line(record);
+        if (fields.size() <= std::max({name_idx, ingredients_idx, directions_idx})) continue;
+
+        recipe_names.push_back(fields[name_idx]);
+        ingredients.push_back(fields[ingredients_idx]);
+        directions.push_back(fields[directions_idx]);
+    }
+
+    file.close();
+}
+
+/*
 // Utility to trim whitespace from both ends
 std::string trim(const std::string& s) {
     auto start = s.begin();
@@ -74,11 +164,6 @@ void load_recipes(const std::string& filename) {
         std::cerr << "One or more required columns not found\n";
     }
 
-    // Vectors to hold the data
-    //std::vector<std::string> recipe_names;
-    //std::vector<std::string> ingredients;
-    //std::vector<std::string> directions;
-
     std::string line;
     while (std::getline(file, line)) {
         if (line.empty()) continue;
@@ -92,7 +177,7 @@ void load_recipes(const std::string& filename) {
 
     file.close();
 }
-
+*/
 /*
 int main() {
     std::ifstream file("recipes.csv");

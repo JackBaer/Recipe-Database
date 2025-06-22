@@ -1,2 +1,0 @@
-/usr/bin/ar qc libimplot3d.a CMakeFiles/implot3d.dir/implot3d/implot3d/implot3d.cpp.o CMakeFiles/implot3d.dir/implot3d/implot3d/implot3d_demo.cpp.o CMakeFiles/implot3d.dir/implot3d/implot3d/implot3d_items.cpp.o CMakeFiles/implot3d.dir/implot3d/implot3d/implot3d_meshes.cpp.o
-/usr/bin/ranlib libimplot3d.a

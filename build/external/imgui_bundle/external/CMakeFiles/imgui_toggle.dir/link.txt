@@ -1,2 +1,0 @@
-/usr/bin/ar qc libimgui_toggle.a CMakeFiles/imgui_toggle.dir/imgui_toggle/imgui_toggle/imgui_toggle.cpp.o CMakeFiles/imgui_toggle.dir/imgui_toggle/imgui_toggle/imgui_toggle_palette.cpp.o CMakeFiles/imgui_toggle.dir/imgui_toggle/imgui_toggle/imgui_toggle_presets.cpp.o CMakeFiles/imgui_toggle.dir/imgui_toggle/imgui_toggle/imgui_toggle_renderer.cpp.o
-/usr/bin/ranlib libimgui_toggle.a
