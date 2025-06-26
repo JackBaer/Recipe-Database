@@ -7,7 +7,11 @@
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
 
+#define IMGUI_DEFINE_MAKE_ENUMS  // Optional for enums, safe to include
+#define IMGUI_HAS_DOCK           // Enable DockBuilder API (older ImGui versions)
+#define IMGUI_ENABLE_DOCKING     // ✅ Required in recent versions
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_opengl3.h"
 #include <stdio.h>
@@ -47,6 +51,54 @@ std::filesystem::path get_executable_directory(char* argv0) {
         std::cerr << "Could not resolve executable path: " << e.what() << "\n";
         return std::filesystem::current_path(); // fallback
     }
+}
+
+void ShowDockSpace()
+{
+    static bool initialized = false;
+
+    // Create a full-screen, invisible window to host the dockspace
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
+
+    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::Begin("MainDockSpace", nullptr, window_flags);
+    ImGui::PopStyleVar(2);
+
+    // Create the dockspace
+    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+
+    // Only build the layout once
+    if (!initialized)
+    {
+        initialized = true;
+
+        ImGui::DockBuilderRemoveNode(dockspace_id); // clear any previous layout
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
+
+        // Split the dockspace into 2 nodes: left and right (50%/50%)
+        ImGuiID dock_main_id = dockspace_id;
+        ImGuiID dock_id_left, dock_id_right;
+        ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.5f, &dock_id_left, &dock_id_right);
+
+        // Dock the windows
+        ImGui::DockBuilderDockWindow("Search Window", dock_id_left);
+        ImGui::DockBuilderDockWindow("Display Window", dock_id_right);
+
+        ImGui::DockBuilderFinish(dockspace_id);
+    }
+
+    ImGui::End(); // End of main dockspace window
 }
 
 // Main code
@@ -119,6 +171,8 @@ int main(int argc, char** argv)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
+    
+io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
@@ -204,9 +258,11 @@ int main(int argc, char** argv)
 	
 	load_recipes(csv_path);
 
+	ShowDockSpace();
+
 	ImGui::Begin("Search Window");
-	
-        static int item_selected_idx = 0; // Here we store our selected data as an index.
+
+	static int item_selected_idx = 0; // Here we store our selected data as an index.
 
         static bool item_highlight = false;
         int item_highlighted_idx = -1; // Here we store our highlighted data as an index.
