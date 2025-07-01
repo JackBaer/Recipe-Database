@@ -189,23 +189,6 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
     ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // Load Fonts
-    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
-    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
-    // - If the file cannot be loaded, the function will return a nullptr. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
-    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
-    // - Read 'docs/FONTS.md' for more instructions and details.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    // - Our Emscripten build process allows embedding fonts to be accessible at runtime from the "fonts/" folder. See Makefile.emscripten for details.
-    //style.FontSizeBase = 20.0f;
-    //io.Fonts->AddFontDefault();
-    //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf");
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
-    //IM_ASSERT(font != nullptr);
-
     // Our state
     bool show_demo_window = true;
     bool show_another_window = false;
@@ -214,6 +197,10 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
     // Our application state
     AppState appState;
 
+    std::filesystem::path executable_dir = get_executable_directory(argv[0]);
+    std::filesystem::path csv_path = executable_dir / "recipes.csv";
+	
+    load_recipes(csv_path);
     // Main loop
     bool done = false;
 #ifdef __EMSCRIPTEN__
@@ -253,15 +240,27 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
 
-	std::filesystem::path executable_dir = get_executable_directory(argv[0]);
-	std::filesystem::path csv_path = executable_dir / "recipes.csv";
-	
-	load_recipes(csv_path);
 
 	ShowDockSpace();
 
 	ImGui::Begin("Search Window");
 
+	// SEARCH FIELD
+	static char characterBuffer[40];
+	ImGui::InputText("Dish Name", characterBuffer, IM_ARRAYSIZE(characterBuffer));
+
+	// Narrow Items
+	std::string currentText(characterBuffer);
+
+	std::vector<std::pair<std::string, int>> currentRecipes;	
+	currentRecipes.clear();
+	for(int i = 0; i < recipe_names.size(); ++i) {
+		if(recipe_names[i].find(currentText) != std::string::npos) {
+			currentRecipes.emplace_back(recipe_names[i], i);
+		}
+	}
+
+	// FILTERED LISTBOX
 	static int item_selected_idx = 0; // Here we store our selected data as an index.
 
         static bool item_highlight = false;
@@ -275,19 +274,22 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 
 	if (ImGui::BeginListBox("##listbox 2", ImVec2(-FLT_MIN, available_height)))
 	{
-	    for (int n = 0; n < recipe_names.size(); ++n)
-	    {
+	    //for (int n = 0; n < recipe_names.size(); ++n) {
+	    for(int n = 0; n < currentRecipes.size(); ++n) {
+		const auto& [name, originalIndex] = currentRecipes[n];
 		bool is_selected = (item_selected_idx == n);
+
 		ImGuiSelectableFlags flags = (item_highlighted_idx == n) ? ImGuiSelectableFlags_Highlight : 0;
 
-		std::string label = recipe_names[n] + "###recipe_" + std::to_string(n);
+		//std::string label = recipe_names[n] + "###recipe_" + std::to_string(n);
+		std::string label = name + "###recipe_" + std::to_string(originalIndex);
 		if (ImGui::Selectable(label.c_str(), is_selected, flags))
 		    item_selected_idx = n;
 
 		if (is_selected) {
 		    ImGui::SetItemDefaultFocus();
-			appState.current_ingredients = ingredients[n];
-			appState.current_directions = directions[n];
+			appState.current_ingredients = ingredients[originalIndex];
+			appState.current_directions = directions[originalIndex];
 		}
 		//std::cout << "Current Number: " << item_selected_idx;		
 	    }
@@ -296,7 +298,6 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
         }
 			
 	ImGui::End();
-
 
 	ImGui::Begin("Display Window"); 
 
