@@ -25,7 +25,9 @@
 #include <map>
 #include <filesystem>                 
 #include <fstream>
-	
+#include <algorithm> // for std::transform
+#include <cctype>    // for std::tolower
+
 #include "data.hpp"
 
 #if defined(IMGUI_IMPL_OPENGL_ES2)
@@ -40,7 +42,7 @@
 
 struct AppState {
 	int counter = 0;
-	std::string current_ingredients = "";
+	std::vector<Ingredient> current_ingredients;
 	std::string current_directions = "";
 };
 
@@ -200,7 +202,12 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
     std::filesystem::path executable_dir = get_executable_directory(argv[0]);
     std::filesystem::path csv_path = executable_dir / "recipes.csv";
 	
-    load_recipes(csv_path);
+
+    read_recipes_from_csv(csv_path);
+
+
+    //load_recipes(csv_path);
+    
     // Main loop
     bool done = false;
 #ifdef __EMSCRIPTEN__
@@ -249,15 +256,37 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 	static char characterBuffer[40];
 	ImGui::InputText("Dish Name", characterBuffer, IM_ARRAYSIZE(characterBuffer));
 
-	// Narrow Items
+	// Convert input text to lowercase
 	std::string currentText(characterBuffer);
+	std::transform(currentText.begin(), currentText.end(), currentText.begin(),
+		       [](unsigned char c){ return std::tolower(c); });
 
-	std::vector<std::pair<std::string, int>> currentRecipes;	
+	// Narrow Items
+	std::vector<std::pair<std::string, int>> currentRecipes;
 	currentRecipes.clear();
-	for(int i = 0; i < recipe_names.size(); ++i) {
-		if(recipe_names[i].find(currentText) != std::string::npos) {
-			currentRecipes.emplace_back(recipe_names[i], i);
+
+	for (int i = 0; i < recipes.size(); ++i) {
+	    std::string loweredName = recipes[i].name;
+	    std::transform(loweredName.begin(), loweredName.end(), loweredName.begin(), [](unsigned char c){ return std::tolower(c); });
+
+	    if(loweredName.find(currentText) != std::string::npos) {
+		currentRecipes.emplace_back(recipes[i].name, i);
+	    }
+	}
+	
+	if(ImGui::TreeNode("Additional Filters")) {
+		{
+			if (ImGui::BeginChild("ConstrainedChild", ImVec2(-FLT_MIN, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
+			static char buf1[32] = "";
+			static char buf2[32] = "";
+				ImGui::InputText("Ingredient", buf1, IM_ARRAYSIZE(buf1));	
+				ImGui::SameLine();
+				ImGui::InputText("Quantity", buf2, IM_ARRAYSIZE(buf2));
+				ImGui::EndChild();
+			}
 		}
+
+		ImGui::TreePop();
 	}
 
 	// FILTERED LISTBOX
@@ -288,8 +317,12 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 
 		if (is_selected) {
 		    ImGui::SetItemDefaultFocus();
-			appState.current_ingredients = ingredients[originalIndex];
-			appState.current_directions = directions[originalIndex];
+
+		    //appState.current_ingredients = ingredients[originalIndex];
+		    //appState.current_directions = directions[originalIndex];
+		
+		    appState.current_ingredients = recipes[originalIndex].ingredients;
+    		    appState.current_directions = recipes[originalIndex].directions;	
 		}
 		//std::cout << "Current Number: " << item_selected_idx;		
 	    }
@@ -301,52 +334,17 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 
 	ImGui::Begin("Display Window"); 
 
-	ImGui::TextWrapped(appState.current_ingredients.c_str());
+
+	std::string full_ingredients = clean_and_format_ingredients(appState.current_ingredients);
+	std::cout << full_ingredients;
+
+	ImGui::TextWrapped(full_ingredients.c_str());
+	
 	ImGui::NewLine();
 	ImGui::TextWrapped(appState.current_directions.c_str());
 
 	ImGui::End();
 
-
-	/*
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-	ImGui::ShowDemoWindow(&show_demo_window);
-
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-        {
-            static float f = 0.0f;
-            static int counter = 0;
-
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
-
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::End();
-        }
-
-        // 3. Show another simple window.
-        if (show_another_window)
-        {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
-        }
-	*/
-	
 
         // Rendering
         ImGui::Render();
@@ -356,6 +354,7 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
     }
+
 #ifdef __EMSCRIPTEN__
     EMSCRIPTEN_MAINLOOP_END;
 #endif
