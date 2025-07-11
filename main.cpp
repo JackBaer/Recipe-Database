@@ -46,6 +46,34 @@ struct AppState {
 	std::string current_directions = "";
 };
 
+float parse_quantity_to_float(const std::string& str) {
+    std::string s = str;
+    s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
+
+    // Replace unicode fractions with float values
+    static std::unordered_map<std::string, float> unicode_fractions = {
+        {"¼", 0.25f}, {"½", 0.5f}, {"¾", 0.75f},
+        {"⅓", 1.0f/3}, {"⅔", 2.0f/3}, {"⅛", 0.125f},
+        {"⅜", 0.375f}, {"⅝", 0.625f}, {"⅞", 0.875f}
+    };
+
+    for (const auto& [sym, val] : unicode_fractions)
+        if (s == sym) return val;
+
+    try {
+        size_t slash = s.find('/');
+        if (slash != std::string::npos) {
+            float num = std::stof(s.substr(0, slash));
+            float denom = std::stof(s.substr(slash + 1));
+            return num / denom;
+        } else {
+            return std::stof(s);
+        }
+    } catch (...) {
+        return -1.0f;
+    }
+}
+
 std::filesystem::path get_executable_directory(char* argv0) {
     try {
         return std::filesystem::canonical(argv0).parent_path();
@@ -260,7 +288,11 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 	std::string currentText(characterBuffer);
 	std::transform(currentText.begin(), currentText.end(), currentText.begin(),
 		       [](unsigned char c){ return std::tolower(c); });
+	static char buf1[32] = "";
+	static char buf2[32] = "";
+	static int selected_unit_idx = 0;  // <- Unit dropdown index
 
+	/*
 	// Narrow Items
 	std::vector<std::pair<std::string, int>> currentRecipes;
 	currentRecipes.clear();
@@ -273,15 +305,28 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 		currentRecipes.emplace_back(recipes[i].name, i);
 	    }
 	}
+	*/
 	
 	if(ImGui::TreeNode("Additional Filters")) {
 		{
 			if (ImGui::BeginChild("ConstrainedChild", ImVec2(-FLT_MIN, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
-			static char buf1[32] = "";
-			static char buf2[32] = "";
 				ImGui::InputText("Ingredient", buf1, IM_ARRAYSIZE(buf1));	
 				ImGui::SameLine();
 				ImGui::InputText("Quantity", buf2, IM_ARRAYSIZE(buf2));
+	
+				if (!availableUnits.empty()) {
+				    const char* preview = availableUnits[selected_unit_idx].c_str();
+				    if (ImGui::BeginCombo("Unit", preview)) {
+					for (int i = 0; i < availableUnits.size(); ++i) {
+					    bool is_selected = (selected_unit_idx == i);
+					    if (ImGui::Selectable(availableUnits[i].c_str(), is_selected))
+						selected_unit_idx = i;
+					    if (is_selected)
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::EndCombo();
+				    }
+				}
 				ImGui::EndChild();
 			}
 		}
@@ -289,9 +334,129 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 		ImGui::TreePop();
 	}
 
+	std::string filterIngredient(buf1);
+	std::string filterQuantity(buf2);
+
+	// Lowercase and trim helper
+	auto normalize = [](std::string& s) {
+	    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+	    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char c) { return !std::isspace(c); }));
+	    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char c) { return !std::isspace(c); }).base(), s.end());
+	};
+
+	normalize(filterIngredient);
+	normalize(filterQuantity);
+
+	// Build the filtered list
+	std::vector<std::pair<std::string, int>> currentRecipes;
+	currentRecipes.clear();
+
+	for (int i = 0; i < recipes.size(); ++i) {
+	    std::string loweredName = recipes[i].name;
+	    std::transform(loweredName.begin(), loweredName.end(), loweredName.begin(), [](unsigned char c){ return std::tolower(c); });
+
+	    // Match dish name
+	    if (loweredName.find(currentText) == std::string::npos)
+		continue;
+
+	    // Match ingredients/quantities (if filters are active)
+	    bool passesIngredientFilter = true;
+
+	    if (!filterIngredient.empty() || !filterQuantity.empty()) {
+		passesIngredientFilter = false;
+		for (const auto& ing : recipes[i].ingredients) {
+		    std::string name = ing.name;
+		    std::string qty = ing.quantity;
+		    normalize(name);
+		    normalize(qty);
+
+		    bool matchIngredient = filterIngredient.empty() || name.find(filterIngredient) != std::string::npos;
+		    bool matchQuantity = filterQuantity.empty() || qty.find(filterQuantity) != std::string::npos;
+
+		    if (matchIngredient && matchQuantity) {
+			passesIngredientFilter = true;
+			break;
+		    }
+		}
+	    }
+
+	    if (passesIngredientFilter) {
+		currentRecipes.emplace_back(recipes[i].name, i);
+	    }
+	    }
+
+	/*
+	std::string filterIngredient(buf1);
+std::string filterQuantity(buf2);
+std::string filterUnit = availableUnits.empty() ? "" : availableUnits[selected_unit_idx];
+
+auto normalize = [](std::string& s) {
+    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char c){ return !std::isspace(c); }));
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char c){ return !std::isspace(c); }).base(), s.end());
+};
+
+normalize(filterIngredient);
+normalize(filterQuantity);
+normalize(filterUnit);
+
+	// Build the filtered list
+	std::vector<std::pair<std::string, int>> currentRecipes;
+	currentRecipes.clear();
+
+
+
+float quantityFilter = parse_quantity_to_float(filterQuantity);
+std::vector<std::tuple<std::string, int, float>> matchedRecipes;
+
+for (int i = 0; i < recipes.size(); ++i) {
+    std::string loweredName = recipes[i].name;
+    std::transform(loweredName.begin(), loweredName.end(), loweredName.begin(), ::tolower);
+
+    if (loweredName.find(currentText) == std::string::npos)
+        continue;
+
+    float bestQtyMatch = -1.0f;
+    bool matched = false;
+
+    for (const auto& ing : recipes[i].ingredients) {
+        std::string ingName = ing.name;
+        std::string ingUnit = ing.unit;
+        std::string ingQty = ing.quantity;
+
+        normalize(ingName);
+        normalize(ingUnit);
+        normalize(ingQty);
+
+        float ingQtyFloat = parse_quantity_to_float(ingQty);
+
+        bool matchesName = filterIngredient.empty() || ingName.find(filterIngredient) != std::string::npos;
+        bool matchesUnit = filterUnit.empty() || ingUnit == filterUnit;
+        bool matchesQty = filterQuantity.empty() || (ingQtyFloat >= 0 && ingQtyFloat <= quantityFilter);
+
+        if (matchesName && matchesUnit && matchesQty) {
+            matched = true;
+            if (ingQtyFloat > bestQtyMatch)
+                bestQtyMatch = ingQtyFloat;
+        }
+    }
+
+    if (matched)
+        matchedRecipes.emplace_back(recipes[i].name, i, bestQtyMatch);
+}
+
+std::sort(matchedRecipes.begin(), matchedRecipes.end(),
+          [](const auto& a, const auto& b) {
+              return std::get<2>(a) > std::get<2>(b);
+          });
+
+currentRecipes.clear();
+for (const auto& [name, index, _] : matchedRecipes)
+    currentRecipes.emplace_back(name, index);
+*/
+
 	// FILTERED LISTBOX
 	static int item_selected_idx = 0; // Here we store our selected data as an index.
-
         static bool item_highlight = false;
         int item_highlighted_idx = -1; // Here we store our highlighted data as an index.
 
@@ -301,10 +466,11 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
         // Custom size: use all width, 5 items tall
 	ImGui::Text("Recipes:");
 
+	/*
 	if (ImGui::BeginListBox("##listbox 2", ImVec2(-FLT_MIN, available_height)))
 	{
-	    //for (int n = 0; n < recipe_names.size(); ++n) {
-	    for(int n = 0; n < currentRecipes.size(); ++n) {
+	    
+	for(int n = 0; n < currentRecipes.size(); ++n) {
 		const auto& [name, originalIndex] = currentRecipes[n];
 		bool is_selected = (item_selected_idx == n);
 
@@ -329,6 +495,26 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 	    ImGui::EndListBox();
 
         }
+	*/
+
+	if (ImGui::BeginListBox("##listbox 2", ImVec2(-FLT_MIN, available_height))) {
+	    for (int n = 0; n < currentRecipes.size(); ++n) {
+		const auto& [name, originalIndex] = currentRecipes[n];
+		bool is_selected = (item_selected_idx == n);
+		ImGuiSelectableFlags flags = (item_highlighted_idx == n) ? ImGuiSelectableFlags_Highlight : 0;
+
+		std::string label = name + "###recipe_" + std::to_string(originalIndex);
+		if (ImGui::Selectable(label.c_str(), is_selected, flags))
+		    item_selected_idx = n;
+
+		if (is_selected) {
+		    ImGui::SetItemDefaultFocus();
+		    appState.current_ingredients = recipes[originalIndex].ingredients;
+		    appState.current_directions = recipes[originalIndex].directions;
+		}
+	    }
+	    ImGui::EndListBox();
+	}
 			
 	ImGui::End();
 
@@ -336,7 +522,7 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 
 
 	std::string full_ingredients = clean_and_format_ingredients(appState.current_ingredients);
-	std::cout << full_ingredients;
+	//std::cout << full_ingredients;
 
 	ImGui::TextWrapped(full_ingredients.c_str());
 	

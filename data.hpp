@@ -5,6 +5,7 @@
 struct Ingredient {
     std::string quantity;
     std::string name;
+    std::string unit;
 };
 
 struct Recipe {
@@ -19,6 +20,8 @@ extern std::vector<Ingredient> ingredients;
 extern std::vector<std::string> directions;
 
 extern std::vector<Recipe> recipes;
+
+extern std::vector<std::string> availableUnits;
 
 std::vector<Ingredient> parse_ingredients(const std::string& ingredients_text);
 std::string clean_and_format_ingredients(const std::vector<Ingredient>& ingredients); 
