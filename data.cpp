@@ -12,13 +12,9 @@
 
 #include "data.hpp"
 
-std::vector<std::string> recipe_names;
-std::vector<std::string> directions;
-std::vector<Ingredient> ingredients;
-
 std::vector<Recipe> recipes;
-
 std::vector<std::string> availableUnits;
+
 
 std::string read_csv_record(std::ifstream& file) {
     std::string line, record;
@@ -71,30 +67,6 @@ std::vector<std::string> parse_csv_line(const std::string& line) {
     return result;
 }
 
-/*
-std::vector<Ingredient> parse_ingredients(const std::string& ingredients_text) {
-    std::vector<Ingredient> result;
-    std::stringstream ss(ingredients_text);
-    std::string token;
-
-    std::regex pattern(R"(^\s*([\d¼½¾⅓⅔⅛⅜⅝⅞.\-/\s]+(?:[a-zA-Z]+)?(?:\s+[a-zA-Z]+)?)\s+(.+?)\s*$)");
-    std::smatch match;
-
-    while (std::getline(ss, token, ',')) {
-        if (std::regex_match(token, match, pattern)) {
-            result.push_back({match[1].str(), match[2].str()});
-        } else {
-            result.push_back({"", token});  // fallback
-        }
-    }
-
-    return result;
-}
-*/
-
-const std::set<std::string> known_units = {
-    "tsp", "tbsp", "cup", "oz", "g", "gram", "grams", "ml", "l", "lb", "kg", "teaspoon", "tablespoon", "pinch", "dash"
-};
 
 std::vector<Ingredient> parse_ingredients(const std::string& ingredients_text) {
     std::vector<Ingredient> result;
@@ -119,18 +91,11 @@ std::vector<Ingredient> parse_ingredients(const std::string& ingredients_text) {
         }
         ing.quantity = quantity_part;
 
-        // Step 2: Parse unit if it's a known unit
-        std::string unit_candidate = word;
-        std::transform(unit_candidate.begin(), unit_candidate.end(), unit_candidate.begin(), ::tolower);
-        if (known_units.count(unit_candidate)) {
-            ing.unit = unit_candidate;
-        } else {
-            // Not a valid unit, treat as part of name
-            if (!unit_candidate.empty())
-                ing.name += unit_candidate + " ";
-        }
+	std::string unit_candidate = word;
+	std::transform(unit_candidate.begin(), unit_candidate.end(), unit_candidate.begin(), ::tolower);
+	ing.unit = unit_candidate;
 
-        // Step 3: Append remaining words to name
+        // Step 2: Append remaining words to name
         std::string rest;
         while (iss >> word) {
             ing.name += word + " ";
@@ -145,42 +110,8 @@ std::vector<Ingredient> parse_ingredients(const std::string& ingredients_text) {
     return result;
 }
 
-
-/*
-std::vector<Ingredient> parse_ingredients(const std::string& ingredients_text) {
-    std::vector<Ingredient> result;
-    std::stringstream ss(ingredients_text);
-    std::string token;
-
-    std::regex pattern(R"(^\s*([\d¼½¾⅓⅔⅛⅜⅝⅞\.\-/\s]+)([a-zA-Z]+)?\s+(.*)$)");
-    std::smatch match;
-
-    while (std::getline(ss, token, ',')) {
-        std::string trimmed = token;
-        trimmed.erase(trimmed.begin(), std::find_if(trimmed.begin(), trimmed.end(), [](unsigned char ch) {
-            return !std::isspace(ch);
-        }));
-        trimmed.erase(std::find_if(trimmed.rbegin(), trimmed.rend(), [](unsigned char ch) {
-            return !std::isspace(ch);
-        }).base(), trimmed.end());
-
-        if (std::regex_match(trimmed, match, pattern)) {
-            std::string qty = match[1].str();
-            std::string unit = match[2].str();  // optional
-            std::string name = match[3].str();
-
-            result.push_back({qty, unit, name});
-        } else {
-            // fallback: store full text in name
-            result.push_back({"", "", token});
-        }
-    }
-
-    return result;
-}
-*/
-
 void read_recipes_from_csv(const std::string& filename) {
+    // Open File
     std::ifstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Failed to open file: " << filename << "\n";
@@ -191,33 +122,40 @@ void read_recipes_from_csv(const std::string& filename) {
     std::string header_line = read_csv_record(file);
     std::vector<std::string> headers = parse_csv_line(header_line);
 
-    int name_idx = -1, ingredients_idx = -1, directions_idx = -1;
+    int name_idx = -1, ingredients_idx = -1, directions_idx = -1, time_idx = -1;
 
+    // Catch all desired rows, and assign the corresponding id values
     for (size_t i = 0; i < headers.size(); ++i) {
         if (headers[i] == "recipe_name") name_idx = i;
         else if (headers[i] == "ingredients") ingredients_idx = i;
         else if (headers[i] == "directions") directions_idx = i;
+	else if (headers[i] == "total_time") time_idx = i;
     }
 
-    if (name_idx == -1 || ingredients_idx == -1 || directions_idx == -1) {
+    // Make sure all columns were found in data
+    if (name_idx == -1 || ingredients_idx == -1 || directions_idx == -1 || time_idx == -1) {
         std::cerr << "Required columns not found\n";
         return;
     }
 
+    // Read through file, ensuring every row is complete
     while (file) {
         std::string record = read_csv_record(file);
         if (record.empty()) continue;
 
         std::vector<std::string> fields = parse_csv_line(record);
-        if (fields.size() <= std::max({name_idx, ingredients_idx, directions_idx})) {
+        if (fields.size() <= std::max({name_idx, ingredients_idx, directions_idx, time_idx})) {
             std::cerr << "Skipping malformed row with only " << fields.size() << " fields\n";
             continue;
         }
 
+	// Build recipe with data
         Recipe r;
         r.name = fields[name_idx];
         r.directions = fields[directions_idx];
+	r.time = fields[time_idx];
 
+	// Make sure all ingredients get parsed properly
         try {
             r.ingredients = parse_ingredients(fields[ingredients_idx]);
         } catch (const std::regex_error& e) {
@@ -225,32 +163,20 @@ void read_recipes_from_csv(const std::string& filename) {
             continue;
         }
 
-        recipes.push_back(r);  // global vector
+	// Push recipe to global list
+        recipes.push_back(r); 
     }
 
-    std::set<std::string> unit_set;
- 
- /*   
-    for (const auto& recipe : recipes) {
-	    for (const auto& ing : recipe.ingredients) {
-		if (!ing.unit.empty()) {
-		    std::string unit = ing.unit;
-		    std::transform(unit.begin(), unit.end(), unit.begin(), ::tolower);
-		    unit_set.insert(unit);
-		}
-	    }
-    }
-*/
-    for (const auto& recipe : recipes) {
-        for (const auto& ing : recipe.ingredients) {
-            if (!ing.unit.empty())
-                unit_set.insert(ing.unit);
-        }
-    }
-
-    std::vector<std::string> unitsList(unit_set.begin(), unit_set.end());
-
-    availableUnits = unitsList;
+    // Hard code units to be used in drop-down selection
+    availableUnits.push_back(" "); // Option for no units
+    availableUnits.push_back("tsp");
+    availableUnits.push_back("tbsp");    
+    availableUnits.push_back("cup");
+    availableUnits.push_back("oz");    
+    availableUnits.push_back("g");
+    availableUnits.push_back("mL");    
+    availableUnits.push_back("L");
+    availableUnits.push_back("lbs");    
 
     file.close();
 }
@@ -275,12 +201,13 @@ std::string clean_and_format_ingredients(const std::vector<Ingredient>& ingredie
         {"oz", "oz"},
         {"ounce", "oz"},
         {"ounces", "oz"},
-        {"ml", "ml"},
-        {"l", "l"},
+        {"ml", "mL"},
+        {"l", "L"},
         {"g", "g"},
         {"kg", "kg"}
     };
 
+    // Trim string of ingredients
     auto trim = [](std::string& s) {
         s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
             return !std::isspace(ch);
@@ -292,12 +219,15 @@ std::string clean_and_format_ingredients(const std::vector<Ingredient>& ingredie
 
     std::ostringstream oss;
 
+    // Standardize ingredients
     for (const auto& ing : ingredients) {
         std::string qty = ing.quantity;
-        std::string name = ing.name;
+	std::string unit = ing.unit;
+	std::string name = ing.name;
 
         trim(qty);
-        trim(name);
+	trim(unit);
+	trim(name);
 
         // Normalize units in qty using regex
         for (const auto& [key, replacement] : unit_map) {
@@ -306,11 +236,100 @@ std::string clean_and_format_ingredients(const std::vector<Ingredient>& ingredie
         }
 
         // Combine cleaned parts
-        if (!qty.empty() && !name.empty())
-            oss << qty << " " << name << "\n";
-        else if (!name.empty())
-            oss << name << "\n";  // If quantity is missing, just show name
+        if (!qty.empty() && !unit.empty() && !name.empty())
+            oss << qty << " " << unit << " " << name << "\n";
+	else if (!name.empty())
+		oss << name << "\n";  // If quantity or unit is missing, just show name
+				  
     }
 
     return oss.str();
+}
+
+std::string clean_recipe_directions(const std::string& input_text) {
+    // Step 1: Trim leading/trailing whitespace
+    std::string text = input_text;
+    text.erase(0, text.find_first_not_of(" \t\n\r"));
+    text.erase(text.find_last_not_of(" \t\n\r") + 1);
+
+    // Step 2: Remove trailing empty lines or signature lines
+    std::istringstream iss(text);
+    std::vector<std::string> lines;
+    std::string line;
+
+    while (std::getline(iss, line)) {
+        line.erase(0, line.find_first_not_of(" \t\r"));
+        line.erase(line.find_last_not_of(" \t\r") + 1);
+        lines.push_back(line);
+    }
+
+    while (!lines.empty()) {
+        const std::string& last = lines.back();
+        if (last.empty() || (last.length() <= 30 && !std::regex_search(last, std::regex(R"([.!?])")))) {
+            lines.pop_back();
+        } else {
+            break;
+        }
+    }
+
+    // Step 3: Recombine lines into one string
+    std::string cleaned_text;
+    for (const auto& l : lines) {
+        cleaned_text += l + " ";
+    }
+
+    // Step 4: Split into sentences
+    std::regex sentence_splitter(R"(([^.!?]+[.!?]))");
+    std::sregex_iterator it(cleaned_text.begin(), cleaned_text.end(), sentence_splitter);
+    std::sregex_iterator end;
+
+    // Step 5: Number each sentence
+    std::ostringstream result;
+    int step_num = 1;
+    for (; it != end; ++it) {
+        std::string sentence = it->str();
+        sentence.erase(0, sentence.find_first_not_of(" \t\n\r"));
+        sentence.erase(sentence.find_last_not_of(" \t\n\r") + 1);
+
+        if (!sentence.empty()) {
+            result << step_num++ << ". " << sentence << "\n";
+        }
+    }
+
+    return result.str();
+}
+
+std::vector<std::string> split_numbered_steps(const std::string& text) {
+    std::vector<std::string> steps;
+
+    // Match: digit(s), period, space (e.g. "1. ")
+    std::regex step_splitter(R"((\d+\.\s))");
+    std::sregex_token_iterator it(text.begin(), text.end(), step_splitter, {-1, 0});
+    std::sregex_token_iterator end;
+
+    std::string current_step;
+    for (; it != end; ++it) {
+        std::string token = it->str();
+
+        if (std::regex_match(token, step_splitter)) {
+            if (!current_step.empty()) {
+                steps.push_back(current_step);
+            }
+            current_step = token;  // Start new step
+        } else {
+            current_step += token;
+        }
+    }
+
+    if (!current_step.empty()) {
+        steps.push_back(current_step);
+    }
+
+    // Trim whitespace
+    for (auto& step : steps) {
+        step.erase(0, step.find_first_not_of(" \t\n\r"));
+        step.erase(step.find_last_not_of(" \t\n\r") + 1);
+    }
+
+    return steps;
 }

@@ -1,34 +1,27 @@
-// Dear ImGui: standalone example application for SDL3 + OpenGL
-// (SDL is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan/Metal graphics context creation, etc.)
-
-// Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com/faq
-// - Getting Started      https://dearimgui.com/getting-started
-// - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
-// - Introduction, links and more at the top of imgui.cpp
-
 #define IMGUI_DEFINE_MAKE_ENUMS  // Optional for enums, safe to include
 #define IMGUI_HAS_DOCK           // Enable DockBuilder API (older ImGui versions)
 #define IMGUI_ENABLE_DOCKING     // ✅ Required in recent versions
+
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_opengl3.h"
-#include <stdio.h>
+
 #include <SDL3/SDL.h>
 
+#include <stdio.h>
 #include <sstream>
+#include <filesystem>                 
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <unordered_set>
 #include <map>
-#include <filesystem>                 
-#include <fstream>
 #include <algorithm> // for std::transform
 #include <cctype>    // for std::tolower
 
-#include "data.hpp"
+#include "data.hpp" // outsourced helper methods for parsing CSV data
 
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <SDL3/SDL_opengles2.h>
@@ -41,11 +34,13 @@
 #endif
 
 struct AppState {
-	int counter = 0;
+	// Values for Display menu, preserved across frames
+	std::string current_recipe;
 	std::vector<Ingredient> current_ingredients;
 	std::string current_directions = "";
 };
 
+//
 float parse_quantity_to_float(const std::string& str) {
     std::string s = str;
     s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
@@ -74,6 +69,7 @@ float parse_quantity_to_float(const std::string& str) {
     }
 }
 
+// Ensure generated executable is able to locate CSV file
 std::filesystem::path get_executable_directory(char* argv0) {
     try {
         return std::filesystem::canonical(argv0).parent_path();
@@ -83,6 +79,7 @@ std::filesystem::path get_executable_directory(char* argv0) {
     }
 }
 
+// Create dockspace to house other windows
 void ShowDockSpace()
 {
     static bool initialized = false;
@@ -202,13 +199,15 @@ int main(int argc, char** argv)
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     
-io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
+    ImFont* font_normal = io.Fonts->AddFontFromFileTTF("Aver.ttf", 16.0f);
+    ImFont* font_large = io.Fonts->AddFontFromFileTTF("Aver.ttf", 32.0f);
+
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
 
     // Setup scaling
     ImGuiStyle& style = ImGui::GetStyle();
@@ -220,24 +219,17 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-    // Our application state
     AppState appState;
 
     std::filesystem::path executable_dir = get_executable_directory(argv[0]);
     std::filesystem::path csv_path = executable_dir / "recipes.csv";
 	
-
     read_recipes_from_csv(csv_path);
 
-
-    //load_recipes(csv_path);
-    
     // Main loop
     bool done = false;
+
 #ifdef __EMSCRIPTEN__
     // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
     // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
@@ -247,12 +239,7 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
     while (!done)
 #endif
     {
-        // Poll and handle events (inputs, window resize, etc.)
-        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-        // [If using SDL_MAIN_USE_CALLBACKS: call ImGui_ImplSDL3_ProcessEvent() from your SDL_AppEvent() function]
+	// Listen for events
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
@@ -275,48 +262,44 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
 
-
+	// Build dockspace
 	ShowDockSpace();
+
+	/*
+	 * SEARCH WINDOW
+	 */
+
+	ImGui::PushFont(font_normal);
 
 	ImGui::Begin("Search Window");
 
-	// SEARCH FIELD
-	static char characterBuffer[40];
-	ImGui::InputText("Dish Name", characterBuffer, IM_ARRAYSIZE(characterBuffer));
+	// DISH SEARCH
+	static char dishName[40];
+	ImGui::InputText("Dish Name", dishName, IM_ARRAYSIZE(dishName));
 
 	// Convert input text to lowercase
-	std::string currentText(characterBuffer);
+	std::string currentText(dishName);
 	std::transform(currentText.begin(), currentText.end(), currentText.begin(),
 		       [](unsigned char c){ return std::tolower(c); });
-	static char buf1[32] = "";
-	static char buf2[32] = "";
+	
+	
+	// DROP-DOWN FILTERS	
+	static char ingredientName[32] = "";
+	static char ingredientQuantity[32] = "";
+	static char recipeTime[32] = "";
+
 	static int selected_unit_idx = 0;  // <- Unit dropdown index
 
-	/*
-	// Narrow Items
-	std::vector<std::pair<std::string, int>> currentRecipes;
-	currentRecipes.clear();
-
-	for (int i = 0; i < recipes.size(); ++i) {
-	    std::string loweredName = recipes[i].name;
-	    std::transform(loweredName.begin(), loweredName.end(), loweredName.begin(), [](unsigned char c){ return std::tolower(c); });
-
-	    if(loweredName.find(currentText) != std::string::npos) {
-		currentRecipes.emplace_back(recipes[i].name, i);
-	    }
-	}
-	*/
-	
 	if(ImGui::TreeNode("Additional Filters")) {
 		{
 			if (ImGui::BeginChild("ConstrainedChild", ImVec2(-FLT_MIN, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
-				ImGui::InputText("Ingredient", buf1, IM_ARRAYSIZE(buf1));	
-				ImGui::SameLine();
-				ImGui::InputText("Quantity", buf2, IM_ARRAYSIZE(buf2));
-	
+				// Ingredient Filtering
+				ImGui::InputText("Ingredient Name", ingredientName, IM_ARRAYSIZE(ingredientName));	
+				ImGui::InputText("Ingredient Quantity", ingredientQuantity, IM_ARRAYSIZE(ingredientQuantity));
+
 				if (!availableUnits.empty()) {
 				    const char* preview = availableUnits[selected_unit_idx].c_str();
-				    if (ImGui::BeginCombo("Unit", preview)) {
+				    if (ImGui::BeginCombo("Ingredient Unit", preview)) {
 					for (int i = 0; i < availableUnits.size(); ++i) {
 					    bool is_selected = (selected_unit_idx == i);
 					    if (ImGui::Selectable(availableUnits[i].c_str(), is_selected))
@@ -327,6 +310,10 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 					ImGui::EndCombo();
 				    }
 				}
+
+				// Time Filtering
+				ImGui::InputText("Recipe Time", recipeTime, IM_ARRAYSIZE(recipeTime));
+
 				ImGui::EndChild();
 			}
 		}
@@ -334,8 +321,10 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 		ImGui::TreePop();
 	}
 
-	std::string filterIngredient(buf1);
-	std::string filterQuantity(buf2);
+
+
+	std::string filterIngredient(ingredientName);
+	std::string filterQuantity(ingredientQuantity);
 
 	// Lowercase and trim helper
 	auto normalize = [](std::string& s) {
@@ -383,119 +372,16 @@ io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
 	    if (passesIngredientFilter) {
 		currentRecipes.emplace_back(recipes[i].name, i);
 	    }
-	    }
-
-	/*
-	std::string filterIngredient(buf1);
-std::string filterQuantity(buf2);
-std::string filterUnit = availableUnits.empty() ? "" : availableUnits[selected_unit_idx];
-
-auto normalize = [](std::string& s) {
-    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char c){ return !std::isspace(c); }));
-    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char c){ return !std::isspace(c); }).base(), s.end());
-};
-
-normalize(filterIngredient);
-normalize(filterQuantity);
-normalize(filterUnit);
-
-	// Build the filtered list
-	std::vector<std::pair<std::string, int>> currentRecipes;
-	currentRecipes.clear();
-
-
-
-float quantityFilter = parse_quantity_to_float(filterQuantity);
-std::vector<std::tuple<std::string, int, float>> matchedRecipes;
-
-for (int i = 0; i < recipes.size(); ++i) {
-    std::string loweredName = recipes[i].name;
-    std::transform(loweredName.begin(), loweredName.end(), loweredName.begin(), ::tolower);
-
-    if (loweredName.find(currentText) == std::string::npos)
-        continue;
-
-    float bestQtyMatch = -1.0f;
-    bool matched = false;
-
-    for (const auto& ing : recipes[i].ingredients) {
-        std::string ingName = ing.name;
-        std::string ingUnit = ing.unit;
-        std::string ingQty = ing.quantity;
-
-        normalize(ingName);
-        normalize(ingUnit);
-        normalize(ingQty);
-
-        float ingQtyFloat = parse_quantity_to_float(ingQty);
-
-        bool matchesName = filterIngredient.empty() || ingName.find(filterIngredient) != std::string::npos;
-        bool matchesUnit = filterUnit.empty() || ingUnit == filterUnit;
-        bool matchesQty = filterQuantity.empty() || (ingQtyFloat >= 0 && ingQtyFloat <= quantityFilter);
-
-        if (matchesName && matchesUnit && matchesQty) {
-            matched = true;
-            if (ingQtyFloat > bestQtyMatch)
-                bestQtyMatch = ingQtyFloat;
-        }
-    }
-
-    if (matched)
-        matchedRecipes.emplace_back(recipes[i].name, i, bestQtyMatch);
-}
-
-std::sort(matchedRecipes.begin(), matchedRecipes.end(),
-          [](const auto& a, const auto& b) {
-              return std::get<2>(a) > std::get<2>(b);
-          });
-
-currentRecipes.clear();
-for (const auto& [name, index, _] : matchedRecipes)
-    currentRecipes.emplace_back(name, index);
-*/
+	}
 
 	// FILTERED LISTBOX
-	static int item_selected_idx = 0; // Here we store our selected data as an index.
-        static bool item_highlight = false;
-        int item_highlighted_idx = -1; // Here we store our highlighted data as an index.
+	static int item_selected_idx = 0; // Selected entry as an index.
+        int item_highlighted_idx = -1; // Highlighted entry as an index.
 
 	// Get the remaining vertical space in the current window
         float available_height = ImGui::GetContentRegionAvail().y;
 
-        // Custom size: use all width, 5 items tall
 	ImGui::Text("Recipes:");
-
-	/*
-	if (ImGui::BeginListBox("##listbox 2", ImVec2(-FLT_MIN, available_height)))
-	{
-	    
-	for(int n = 0; n < currentRecipes.size(); ++n) {
-		const auto& [name, originalIndex] = currentRecipes[n];
-		bool is_selected = (item_selected_idx == n);
-
-		ImGuiSelectableFlags flags = (item_highlighted_idx == n) ? ImGuiSelectableFlags_Highlight : 0;
-
-		//std::string label = recipe_names[n] + "###recipe_" + std::to_string(n);
-		std::string label = name + "###recipe_" + std::to_string(originalIndex);
-		if (ImGui::Selectable(label.c_str(), is_selected, flags))
-		    item_selected_idx = n;
-
-		if (is_selected) {
-		    ImGui::SetItemDefaultFocus();
-
-		    //appState.current_ingredients = ingredients[originalIndex];
-		    //appState.current_directions = directions[originalIndex];
-		
-		    appState.current_ingredients = recipes[originalIndex].ingredients;
-    		    appState.current_directions = recipes[originalIndex].directions;	
-		}
-		//std::cout << "Current Number: " << item_selected_idx;		
-	    }
-	    ImGui::EndListBox();
-
-        }
-	*/
 
 	if (ImGui::BeginListBox("##listbox 2", ImVec2(-FLT_MIN, available_height))) {
 	    for (int n = 0; n < currentRecipes.size(); ++n) {
@@ -509,6 +395,7 @@ for (const auto& [name, index, _] : matchedRecipes)
 
 		if (is_selected) {
 		    ImGui::SetItemDefaultFocus();
+		    appState.current_recipe = recipes[originalIndex].name;
 		    appState.current_ingredients = recipes[originalIndex].ingredients;
 		    appState.current_directions = recipes[originalIndex].directions;
 		}
@@ -520,14 +407,43 @@ for (const auto& [name, index, _] : matchedRecipes)
 
 	ImGui::Begin("Display Window"); 
 
-
-	std::string full_ingredients = clean_and_format_ingredients(appState.current_ingredients);
-	//std::cout << full_ingredients;
-
-	ImGui::TextWrapped(full_ingredients.c_str());
+	ImGui::PopFont();
+	ImGui::PushFont(font_large);
+	ImGui::TextWrapped(appState.current_recipe.c_str());
+	ImGui::PopFont();
+	ImGui::PushFont(font_normal);
 	
+	// Create formatted version of ingredients list for current recipe
+	std::string full_ingredients = clean_and_format_ingredients(appState.current_ingredients);
+	std::string full_directions = clean_recipe_directions(appState.current_directions);
+
+	// Preserve state of directions checkboxes across frames
+	static std::string last_directions;
+	static std::vector<std::string> direction_steps;
+	static std::vector<char> step_checkboxes;
+	
+	// Only rebuild the displayed directions/checkboxes if user selects a new recipe
+	if(full_directions != last_directions) {
+		last_directions = full_directions;
+		direction_steps = split_numbered_steps(full_directions);
+		step_checkboxes = std::vector<char>(direction_steps.size(), 0);
+	}
+	
+	
+	// Show recipe text
 	ImGui::NewLine();
-	ImGui::TextWrapped(appState.current_directions.c_str());
+	ImGui::TextWrapped(full_ingredients.c_str());
+	ImGui::NewLine();
+
+	// Discretize and create checkboxes for every step of recipe directions	
+	for (size_t i = 0; i < direction_steps.size(); ++i) {
+	    std::string label = "##step" + std::to_string(i);
+	    ImGui::Checkbox(label.c_str(), reinterpret_cast<bool*>(&step_checkboxes[i]));
+	    ImGui::SameLine();
+	    ImGui::Text("%s", direction_steps[i].c_str());
+	}
+	
+	ImGui::PopFont();
 
 	ImGui::End();
 
