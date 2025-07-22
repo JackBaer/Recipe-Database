@@ -33,12 +33,24 @@
 #include "../libs/emscripten/emscripten_mainloop_stub.h"
 #endif
 
+enum Page {
+	MainMenu,
+	RecipeCreate,
+	ExportRecipe
+};
+
 struct AppState {
 	// Values for Display menu, preserved across frames
 	std::string current_recipe;
 	std::vector<Ingredient> current_ingredients;
 	std::string current_directions = "";
+	ImFont* font_normal = nullptr;
+	ImFont* font_large = nullptr;
 };
+
+Page currentPage = Page::MainMenu;
+
+AppState appState;
 
 //
 float parse_quantity_to_float(const std::string& str) {
@@ -79,250 +91,135 @@ std::filesystem::path get_executable_directory(char* argv0) {
     }
 }
 
-// Create dockspace to house other windows
-void ShowDockSpace()
+void BuildDockLayoutForPage(ImGuiID dockspace_id, Page page, const ImVec2& size)
 {
-    static bool initialized = false;
+    ImGui::DockBuilderRemoveNode(dockspace_id);
+    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, size);
 
-    // Create a full-screen, invisible window to host the dockspace
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::SetNextWindowViewport(viewport->ID);
-
-    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
-                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                    ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::Begin("MainDockSpace", nullptr, window_flags);
-    ImGui::PopStyleVar(2);
-
-    // Create the dockspace
-    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-
-    // Only build the layout once
-    if (!initialized)
+    if (page == Page::RecipeCreate)
     {
-        initialized = true;
-
-        ImGui::DockBuilderRemoveNode(dockspace_id); // clear any previous layout
-        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-        ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
-
-        // Split the dockspace into 2 nodes: left and right (50%/50%)
         ImGuiID dock_main_id = dockspace_id;
         ImGuiID dock_id_left, dock_id_right;
         ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.5f, &dock_id_left, &dock_id_right);
 
-        // Dock the windows
         ImGui::DockBuilderDockWindow("Search Window", dock_id_left);
         ImGui::DockBuilderDockWindow("Display Window", dock_id_right);
+        ImGui::DockBuilderDockWindow("Recipe App", dock_main_id);
+    }
+    else if (page == Page::ExportRecipe)
+    {
+        ImGui::DockBuilderDockWindow("Export Recipe", dockspace_id);
+    }
+    else if (page == Page::MainMenu)
+    {
+        ImGui::DockBuilderDockWindow("Main Menu Window", dockspace_id);
+    }
+
+    ImGui::DockBuilderFinish(dockspace_id);
+}
+
+void ShowDockSpace(Page currentPage) {
+    static bool initialized = false;
+    static Page lastPage = Page::MainMenu;
+
+    // Get main viewport
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
+
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking |
+                                    ImGuiWindowFlags_NoTitleBar |
+                                    ImGuiWindowFlags_NoCollapse |
+                                    ImGuiWindowFlags_NoResize |
+                                    ImGuiWindowFlags_NoMove |
+                                    ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                    ImGuiWindowFlags_NoNavFocus |
+                                    ImGuiWindowFlags_MenuBar;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::Begin("DockSpace", nullptr, window_flags);
+    ImGui::PopStyleVar(2);
+
+    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+
+    // Rebuild layout only if the page changes
+    if (!initialized || currentPage != lastPage) {
+        initialized = true;
+        lastPage = currentPage;
+
+        // Clear any previous layout
+        ImGui::DockBuilderRemoveNode(dockspace_id);
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
+
+        if (currentPage == Page::MainMenu) {
+            ImGuiID left, right;
+            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.5f, &left, &right);
+
+            ImGui::DockBuilderDockWindow("Search Window", left);
+            ImGui::DockBuilderDockWindow("Display Window", right);
+        }
+        else if (currentPage == Page::RecipeCreate) {
+            // Reserved for future layout
+        }
+        else if (currentPage == Page::ExportRecipe) {
+            // Reserved for future layout
+        }
 
         ImGui::DockBuilderFinish(dockspace_id);
     }
 
-    ImGui::End(); // End of main dockspace window
+    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+    ImGui::End();
 }
 
-// Main code
-int main(int argc, char** argv)
-{
-    // Setup SDL
-    // [If using SDL_MAIN_USE_CALLBACKS: all code below until the main loop starts would likely be your SDL_AppInit() function]
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
-    {
-        printf("Error: SDL_Init(): %s\n", SDL_GetError());
-        return -1;
-    }
+void RenderSearchWindow() {
+    ImGui::PushFont(appState.font_normal);
+    ImGui::Begin("Search Window");
 
-    // Decide GL+GLSL versions
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-    // GL ES 2.0 + GLSL 100 (WebGL 1.0)
-    const char* glsl_version = "#version 100";
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-#elif defined(IMGUI_IMPL_OPENGL_ES3)
-    // GL ES 3.0 + GLSL 300 es (WebGL 2.0)
-    const char* glsl_version = "#version 300 es";
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-#elif defined(__APPLE__)
-    // GL 3.2 Core + GLSL 150
-    const char* glsl_version = "#version 150";
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-#else
-    // GL 3.0 + GLSL 130
-    const char* glsl_version = "#version 130";
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-#endif
+    // Dish name input
+    static char dishName[40] = "";
+    ImGui::InputText("Dish Name", dishName, IM_ARRAYSIZE(dishName));
 
-    // Create window with graphics context
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    float main_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
-    SDL_WindowFlags window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-    SDL_Window* window = SDL_CreateWindow("Dear ImGui SDL3+OpenGL3 example", (int)(1280 * main_scale), (int)(720 * main_scale), window_flags);
-    if (window == nullptr)
-    {
-        printf("Error: SDL_CreateWindow(): %s\n", SDL_GetError());
-        return -1;
-    }
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    if (gl_context == nullptr)
-    {
-        printf("Error: SDL_GL_CreateContext(): %s\n", SDL_GetError());
-        return -1;
-    }
+    std::string currentText(dishName);
+    std::transform(currentText.begin(), currentText.end(), currentText.begin(),
+        [](unsigned char c){ return std::tolower(c); });
 
-    SDL_GL_MakeCurrent(window, gl_context);
-    SDL_GL_SetSwapInterval(1); // Enable vsync
-    SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-    SDL_ShowWindow(window);
+    static char ingredientName[32] = "";
+    static char ingredientQuantity[32] = "";
+    static char recipeTime[32] = "";
+    static int selected_unit_idx = 0;
 
-    // Setup Dear ImGui context
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    if (ImGui::TreeNode("Additional Filters")) {
+        if (ImGui::BeginChild("FilterChild", ImVec2(-FLT_MIN, 0), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
+            ImGui::InputText("Ingredient Name", ingredientName, IM_ARRAYSIZE(ingredientName));
+            ImGui::InputText("Ingredient Quantity", ingredientQuantity, IM_ARRAYSIZE(ingredientQuantity));
 
-    ImFont* font_normal = io.Fonts->AddFontFromFileTTF("Aver.ttf", 16.0f);
-    ImFont* font_large = io.Fonts->AddFontFromFileTTF("Aver.ttf", 32.0f);
+            if (!availableUnits.empty()) {
+                const char* preview = availableUnits[selected_unit_idx].c_str();
+                if (ImGui::BeginCombo("Ingredient Unit", preview)) {
+                    for (int i = 0; i < availableUnits.size(); ++i) {
+                        bool is_selected = (selected_unit_idx == i);
+                        if (ImGui::Selectable(availableUnits[i].c_str(), is_selected))
+                            selected_unit_idx = i;
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+            }
 
-    // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
-
-    // Setup scaling
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.ScaleAllSizes(main_scale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
-    style.FontScaleDpi = main_scale;        // Set initial font scale. (using io.ConfigDpiScaleFonts=true makes this unnecessary. We leave both here for documentation purpose)
-
-    // Setup Platform/Renderer backends
-    ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
-    ImGui_ImplOpenGL3_Init(glsl_version);
-
-    // Our state
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-    AppState appState;
-
-    std::filesystem::path executable_dir = get_executable_directory(argv[0]);
-    std::filesystem::path csv_path = executable_dir / "recipes.csv";
-	
-    read_recipes_from_csv(csv_path);
-
-    // Main loop
-    bool done = false;
-
-#ifdef __EMSCRIPTEN__
-    // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
-    // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
-    io.IniFilename = nullptr;
-    EMSCRIPTEN_MAINLOOP_BEGIN
-#else
-    while (!done)
-#endif
-    {
-	// Listen for events
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
-        {
-            ImGui_ImplSDL3_ProcessEvent(&event);
-            if (event.type == SDL_EVENT_QUIT)
-                done = true;
-            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window))
-                done = true;
+            ImGui::InputText("Recipe Time", recipeTime, IM_ARRAYSIZE(recipeTime));
+            ImGui::EndChild();
         }
+        ImGui::TreePop();
+    }
 
-        // [If using SDL_MAIN_USE_CALLBACKS: all code below would likely be your SDL_AppIterate() function]
-        if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
-        {
-            SDL_Delay(10);
-            continue;
-        }
-
-        // Start the Dear ImGui frame
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
-
-	// Build dockspace
-	ShowDockSpace();
-
-	/*
-	 * SEARCH WINDOW
-	 */
-
-	ImGui::PushFont(font_normal);
-
-	ImGui::Begin("Search Window");
-
-	// DISH SEARCH
-	static char dishName[40];
-	ImGui::InputText("Dish Name", dishName, IM_ARRAYSIZE(dishName));
-
-	// Convert input text to lowercase
-	std::string currentText(dishName);
-	std::transform(currentText.begin(), currentText.end(), currentText.begin(),
-		       [](unsigned char c){ return std::tolower(c); });
-	
-	
-	// DROP-DOWN FILTERS	
-	static char ingredientName[32] = "";
-	static char ingredientQuantity[32] = "";
-	static char recipeTime[32] = "";
-
-	static int selected_unit_idx = 0;  // <- Unit dropdown index
-
-	if(ImGui::TreeNode("Additional Filters")) {
-		{
-			if (ImGui::BeginChild("ConstrainedChild", ImVec2(-FLT_MIN, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
-				// Ingredient Filtering
-				ImGui::InputText("Ingredient Name", ingredientName, IM_ARRAYSIZE(ingredientName));	
-				ImGui::InputText("Ingredient Quantity", ingredientQuantity, IM_ARRAYSIZE(ingredientQuantity));
-
-				if (!availableUnits.empty()) {
-				    const char* preview = availableUnits[selected_unit_idx].c_str();
-				    if (ImGui::BeginCombo("Ingredient Unit", preview)) {
-					for (int i = 0; i < availableUnits.size(); ++i) {
-					    bool is_selected = (selected_unit_idx == i);
-					    if (ImGui::Selectable(availableUnits[i].c_str(), is_selected))
-						selected_unit_idx = i;
-					    if (is_selected)
-						ImGui::SetItemDefaultFocus();
-					}
-					ImGui::EndCombo();
-				    }
-				}
-
-				// Time Filtering
-				ImGui::InputText("Recipe Time", recipeTime, IM_ARRAYSIZE(recipeTime));
-
-				ImGui::EndChild();
-			}
-		}
-
-		ImGui::TreePop();
-	}
-
-
-
+    // Filter logic & result listbox...
+    // (keep the filtering/normalizing and listbox code from your original block here)
 	std::string filterIngredient(ingredientName);
 	std::string filterQuantity(ingredientQuantity);
 
@@ -403,50 +300,227 @@ int main(int argc, char** argv)
 	    ImGui::EndListBox();
 	}
 			
-	ImGui::End();
+	//ImGui::EndChild();
 
-	ImGui::Begin("Display Window"); 
 
-	ImGui::PopFont();
-	ImGui::PushFont(font_large);
-	ImGui::TextWrapped(appState.current_recipe.c_str());
-	ImGui::PopFont();
-	ImGui::PushFont(font_normal);
+
+    ImGui::End();
+    ImGui::PopFont();
+}
+
+void RenderDisplayWindow() {
+	ImGui::Begin("Display Window");
+
+    ImGui::PushFont(appState.font_large);
+    ImGui::TextWrapped(appState.current_recipe.c_str());
+    ImGui::PopFont();
+    ImGui::PushFont(appState.font_normal);
+
+    std::string full_ingredients = clean_and_format_ingredients(appState.current_ingredients);
+    std::string full_directions = clean_recipe_directions(appState.current_directions);
+
+    static std::string last_directions;
+    static std::vector<std::string> direction_steps;
+    static std::vector<char> step_checkboxes;
+
+    if (full_directions != last_directions) {
+        last_directions = full_directions;
+        direction_steps = split_numbered_steps(full_directions);
+        step_checkboxes = std::vector<char>(direction_steps.size(), 0);
+    }
+
+    ImGui::NewLine();
+    ImGui::TextWrapped(full_ingredients.c_str());
+    ImGui::NewLine();
+
+    for (size_t i = 0; i < direction_steps.size(); ++i) {
+        std::string label = "##step" + std::to_string(i);
+        ImGui::Checkbox(label.c_str(), reinterpret_cast<bool*>(&step_checkboxes[i]));
+        ImGui::SameLine();
+        ImGui::Text("%s", direction_steps[i].c_str());
+    }
+
+    ImGui::PopFont();
+    ImGui::End();
+}
+
+void ShowRecipeCreatePage() {
+
+}
+
+void ShowExportPage() {
+    ImGui::Begin("Export Page");
+
+    if (ImGui::Button("Back to Main Menu")) {
+        currentPage = Page::MainMenu;
+    }
+
+    ImGui::End();
+}
+
+void ShowMainMenuPage() {
+    RenderSearchWindow();
+    RenderDisplayWindow();
+
+    ImGui::Begin("Main Menu Controls");
+
+    if (ImGui::Button("Export Recipe")) {
+        currentPage = Page::ExportRecipe;
+    }
+
+    ImGui::End();
+}
+
+
+
+
+// Main code
+int main(int argc, char** argv)
+{
+    // Setup SDL
+    // [If using SDL_MAIN_USE_CALLBACKS: all code below until the main loop starts would likely be your SDL_AppInit() function]
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
+    {
+        printf("Error: SDL_Init(): %s\n", SDL_GetError());
+        return -1;
+    }
+
+    // Decide GL+GLSL versions
+#if defined(IMGUI_IMPL_OPENGL_ES2)
+    // GL ES 2.0 + GLSL 100 (WebGL 1.0)
+    const char* glsl_version = "#version 100";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#elif defined(IMGUI_IMPL_OPENGL_ES3)
+    // GL ES 3.0 + GLSL 300 es (WebGL 2.0)
+    const char* glsl_version = "#version 300 es";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#elif defined(__APPLE__)
+    // GL 3.2 Core + GLSL 150
+    const char* glsl_version = "#version 150";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+#else
+    // GL 3.0 + GLSL 130
+    const char* glsl_version = "#version 130";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
+
+    // Create window with graphics context
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    float main_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+    SDL_WindowFlags window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    SDL_Window* window = SDL_CreateWindow("Dear ImGui SDL3+OpenGL3 example", (int)(1280 * main_scale), (int)(720 * main_scale), window_flags);
+    if (window == nullptr)
+    {
+        printf("Error: SDL_CreateWindow(): %s\n", SDL_GetError());
+        return -1;
+    }
+    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+    if (gl_context == nullptr)
+    {
+        printf("Error: SDL_GL_CreateContext(): %s\n", SDL_GetError());
+        return -1;
+    }
+
+    SDL_GL_MakeCurrent(window, gl_context);
+    SDL_GL_SetSwapInterval(1); // Enable vsync
+    SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    SDL_ShowWindow(window);
+
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // 💥 Enable Docking
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    appState.font_normal = io.Fonts->AddFontFromFileTTF("Aver.ttf", 16.0f);
+    appState.font_large = io.Fonts->AddFontFromFileTTF("Aver.ttf", 32.0f);
+
+        // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+
+    // Setup scaling
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(main_scale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
+    style.FontScaleDpi = main_scale;        // Set initial font scale. (using io.ConfigDpiScaleFonts=true makes this unnecessary. We leave both here for documentation purpose)
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+
+    // Our state
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    
+    std::filesystem::path executable_dir = get_executable_directory(argv[0]);
+    std::filesystem::path csv_path = executable_dir / "recipes.csv";
 	
-	// Create formatted version of ingredients list for current recipe
-	std::string full_ingredients = clean_and_format_ingredients(appState.current_ingredients);
-	std::string full_directions = clean_recipe_directions(appState.current_directions);
+    read_recipes_from_csv(csv_path);
 
-	// Preserve state of directions checkboxes across frames
-	static std::string last_directions;
-	static std::vector<std::string> direction_steps;
-	static std::vector<char> step_checkboxes;
-	
-	// Only rebuild the displayed directions/checkboxes if user selects a new recipe
-	if(full_directions != last_directions) {
-		last_directions = full_directions;
-		direction_steps = split_numbered_steps(full_directions);
-		step_checkboxes = std::vector<char>(direction_steps.size(), 0);
+    // Main loop
+    bool done = false;
+
+#ifdef __EMSCRIPTEN__
+    // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
+    // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
+    io.IniFilename = nullptr;
+    EMSCRIPTEN_MAINLOOP_BEGIN
+#else
+    while (!done)
+#endif
+    {
+	// Listen for events
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            ImGui_ImplSDL3_ProcessEvent(&event);
+            if (event.type == SDL_EVENT_QUIT)
+                done = true;
+            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window))
+                done = true;
+        }
+
+        // [If using SDL_MAIN_USE_CALLBACKS: all code below would likely be your SDL_AppIterate() function]
+        if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
+        {
+            SDL_Delay(10);
+            continue;
+        }
+
+        // Start the Dear ImGui frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+
+	// Build dockspace
+	ShowDockSpace(currentPage);
+
+	switch (currentPage) {
+	    case Page::MainMenu:
+		ShowMainMenuPage();
+		break;
+	    case Page::RecipeCreate:
+		ShowRecipeCreatePage();  // You can leave this empty for now
+		break;
+	    case Page::ExportRecipe:
+		ShowExportPage();        // Empty for now
+		break;
 	}
-	
-	
-	// Show recipe text
-	ImGui::NewLine();
-	ImGui::TextWrapped(full_ingredients.c_str());
-	ImGui::NewLine();
-
-	// Discretize and create checkboxes for every step of recipe directions	
-	for (size_t i = 0; i < direction_steps.size(); ++i) {
-	    std::string label = "##step" + std::to_string(i);
-	    ImGui::Checkbox(label.c_str(), reinterpret_cast<bool*>(&step_checkboxes[i]));
-	    ImGui::SameLine();
-	    ImGui::Text("%s", direction_steps[i].c_str());
-	}
-	
-	ImGui::PopFont();
-
-	ImGui::End();
-
 
         // Rendering
         ImGui::Render();
