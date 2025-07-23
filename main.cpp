@@ -222,6 +222,7 @@ void RenderSearchWindow() {
     // (keep the filtering/normalizing and listbox code from your original block here)
 	std::string filterIngredient(ingredientName);
 	std::string filterQuantity(ingredientQuantity);
+	std::string filterUnit(availableUnits[selected_unit_idx]);
 
 	// Lowercase and trim helper
 	auto normalize = [](std::string& s) {
@@ -232,6 +233,7 @@ void RenderSearchWindow() {
 
 	normalize(filterIngredient);
 	normalize(filterQuantity);
+	normalize(filterUnit);
 
 	// Build the filtered list
 	std::vector<std::pair<std::string, int>> currentRecipes;
@@ -241,33 +243,39 @@ void RenderSearchWindow() {
 	    std::string loweredName = recipes[i].name;
 	    std::transform(loweredName.begin(), loweredName.end(), loweredName.begin(), [](unsigned char c){ return std::tolower(c); });
 
-	    // Match dish name
-	    if (loweredName.find(currentText) == std::string::npos)
+	    // If current recipe matches name filter, keep checking other filters
+	    if(loweredName.find(currentText) == std::string::npos) {
 		continue;
-
-	    // Match ingredients/quantities (if filters are active)
-	    bool passesIngredientFilter = true;
-
-	    if (!filterIngredient.empty() || !filterQuantity.empty()) {
-		passesIngredientFilter = false;
-		for (const auto& ing : recipes[i].ingredients) {
-		    std::string name = ing.name;
-		    std::string qty = ing.quantity;
-		    normalize(name);
-		    normalize(qty);
-
-		    bool matchIngredient = filterIngredient.empty() || name.find(filterIngredient) != std::string::npos;
-		    bool matchQuantity = filterQuantity.empty() || qty.find(filterQuantity) != std::string::npos;
-
-		    if (matchIngredient && matchQuantity) {
-			passesIngredientFilter = true;
-			break;
-		    }
-		}
 	    }
-
-	    if (passesIngredientFilter) {
+	    // If other filters are empty, then just add recipe to list
+	    if(filterIngredient.empty() && filterQuantity.empty()) {
 		currentRecipes.emplace_back(recipes[i].name, i);
+	    }
+	    else {
+		    bool passesIngredientFilter = false;
+		    // Iterate through every ingredient to see if there is a match with filter
+		    for(const auto& ing : recipes[i].ingredients) {
+			std::string name = ing.name;
+			std::string qty = ing.quantity;
+			std::string unit = ing.unit;
+			normalize(name);
+			normalize(qty);
+			normalize(unit);
+
+			// Check if 
+			bool matchIngredient = filterIngredient.empty() || name.find(filterIngredient) != std::string::npos;
+			bool matchQuantity = filterQuantity.empty() || qty.find(filterQuantity) != std::string::npos;
+			bool matchUnit = (filterUnit == " ") || unit.find(filterUnit) != std::string::npos;
+			if(matchIngredient && matchQuantity && matchUnit) {
+			    passesIngredientFilter = true;
+			    break;
+			}
+		    }
+
+		    // If recipe has a match with ingredient filters, add it to list
+		    if(passesIngredientFilter) {
+			currentRecipes.emplace_back(recipes[i].name, i);
+		    }
 	    }
 	}
 
@@ -300,10 +308,6 @@ void RenderSearchWindow() {
 	    ImGui::EndListBox();
 	}
 			
-	//ImGui::EndChild();
-
-
-
     ImGui::End();
     ImGui::PopFont();
 }
@@ -422,7 +426,7 @@ int main(int argc, char** argv)
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     float main_scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
     SDL_WindowFlags window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-    SDL_Window* window = SDL_CreateWindow("Dear ImGui SDL3+OpenGL3 example", (int)(1280 * main_scale), (int)(720 * main_scale), window_flags);
+    SDL_Window* window = SDL_CreateWindow("Dynamic Pantry Recipe Engine", (int)(1280 * main_scale), (int)(720 * main_scale), window_flags);
     if (window == nullptr)
     {
         printf("Error: SDL_CreateWindow(): %s\n", SDL_GetError());

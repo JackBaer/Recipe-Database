@@ -15,6 +15,34 @@
 std::vector<Recipe> recipes;
 std::vector<std::string> availableUnits;
 
+std::string normalize_fractions(const std::string& input) {
+    static const std::unordered_map<char, std::string> fraction_map = {
+        { L'¼', "1/4" }, { L'½', "1/2" }, { L'¾', "3/4" },
+        { L'⅓', "1/3" }, { L'⅔', "2/3" },
+        { L'⅛', "1/8" }, { L'⅜', "3/8" }, { L'⅝', "5/8" }, { L'⅞', "7/8" }
+    };
+
+    std::ostringstream oss;
+    for (char c : input) {
+        auto it = fraction_map.find(c);
+        if (it != fraction_map.end()) {
+            oss << it->second;
+        } else {
+            oss << c;
+        }
+    }
+
+    return oss.str();
+}
+
+const std::unordered_map<std::string, std::string> unit_map = {
+    {"T", "tbsp"}, {"Tbsp", "tbsp"}, {"TBS", "tbsp"},
+    {"Tablespoon", "tbsp"}, {"tablespoons", "tbsp"}, {"tablespoon", "tbsp"},
+    {"t", "tsp"}, {"tsp", "tsp"}, {"Teaspoon", "tsp"}, {"teaspoons", "tsp"}, {"teaspoon", "tsp"},
+    {"C", "cup"}, {"Cup", "cup"}, {"cups", "cup"}, {"c", "cup"},
+    {"oz", "oz"}, {"ounce", "oz"}, {"ounces", "oz"},
+    {"ml", "mL"}, {"l", "L"}, {"g", "g"}, {"kg", "kg"}, {"lbs", "lbs"}
+};
 
 std::string read_csv_record(std::ifstream& file) {
     std::string line, record;
@@ -66,7 +94,6 @@ std::vector<std::string> parse_csv_line(const std::string& line) {
     result.push_back(field);
     return result;
 }
-
 
 std::vector<Ingredient> parse_ingredients(const std::string& ingredients_text) {
     std::vector<Ingredient> result;
