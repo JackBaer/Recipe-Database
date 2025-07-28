@@ -223,7 +223,7 @@ void RenderSearchWindow() {
 	std::string filterIngredient(ingredientName);
 	std::string filterQuantity(ingredientQuantity);
 	std::string filterUnit(availableUnits[selected_unit_idx]);
-
+	
 	// Lowercase and trim helper
 	auto normalize = [](std::string& s) {
 	    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -248,7 +248,7 @@ void RenderSearchWindow() {
 		continue;
 	    }
 	    // If other filters are empty, then just add recipe to list
-	    if(filterIngredient.empty() && filterQuantity.empty()) {
+	    if(filterIngredient.empty() && filterQuantity.empty() && (filterUnit == " ")) {
 		currentRecipes.emplace_back(recipes[i].name, i);
 	    }
 	    else {
@@ -261,8 +261,8 @@ void RenderSearchWindow() {
 			normalize(name);
 			normalize(qty);
 			normalize(unit);
-
-			// Check if 
+			
+			// Check if recipe fulfills all connditions 
 			bool matchIngredient = filterIngredient.empty() || name.find(filterIngredient) != std::string::npos;
 			bool matchQuantity = filterQuantity.empty() || qty.find(filterQuantity) != std::string::npos;
 			bool matchUnit = (filterUnit == " ") || unit.find(filterUnit) != std::string::npos;
@@ -476,6 +476,7 @@ int main(int argc, char** argv)
 	
     read_recipes_from_csv(csv_path);
 
+    clean_all_ingredients_in_recipes();
     // Main loop
     bool done = false;
 

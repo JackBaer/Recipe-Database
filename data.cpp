@@ -208,6 +208,7 @@ void read_recipes_from_csv(const std::string& filename) {
     file.close();
 }
 
+/*
 std::string clean_and_format_ingredients(const std::vector<Ingredient>& ingredients) {
     std::unordered_map<std::string, std::string> unit_map = {
         {"T", "tbsp"},
@@ -268,6 +269,89 @@ std::string clean_and_format_ingredients(const std::vector<Ingredient>& ingredie
 	else if (!name.empty())
 		oss << name << "\n";  // If quantity or unit is missing, just show name
 				  
+    }
+
+    return oss.str();
+}
+*/
+
+std::string clean_and_format_ingredients(const std::vector<Ingredient>& ingredients) {
+    std::unordered_map<std::string, std::string> unit_map = {
+        {"T", "tbsp"}, {"Tbsp", "tbsp"}, {"TBS", "tbsp"}, {"Tablespoon", "tbsp"},
+        {"tablespoons", "tbsp"}, {"tablespoon", "tbsp"}, {"t", "tsp"},
+        {"tsp", "tsp"}, {"Teaspoon", "tsp"}, {"teaspoons", "tsp"}, {"teaspoon", "tsp"},
+        {"C", "cup"}, {"Cup", "cup"}, {"cups", "cup"}, {"c", "cup"},
+        {"oz", "oz"}, {"ounce", "oz"}, {"ounces", "oz"},
+        {"ml", "mL"}, {"l", "L"}, {"g", "g"}, {"kg", "kg"}
+    };
+
+    // ASCII to Unicode fraction map
+    std::unordered_map<std::string, std::string> ascii_to_unicode = {
+        {"1/4", "¼"}, {"1/2", "½"}, {"3/4", "¾"},
+        {"1/3", "⅓"}, {"2/3", "⅔"},
+        {"1/5", "⅕"}, {"2/5", "⅖"}, {"3/5", "⅗"}, {"4/5", "⅘"},
+        {"1/6", "⅙"}, {"5/6", "⅚"},
+        {"1/8", "⅛"}, {"3/8", "⅜"}, {"5/8", "⅝"}, {"7/8", "⅞"}
+    };
+
+    // Trim helper
+    auto trim = [](std::string& s) {
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
+            return !std::isspace(ch);
+        }));
+        s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) {
+            return !std::isspace(ch);
+        }).base(), s.end());
+    };
+
+    // Convert "1 1/2" or "1/2" to "1½" or "½"
+    auto convert_to_unicode_fractions = [&](std::string qty) -> std::string {
+        std::regex mixed_number_pattern(R"((\b\d+)\s+(\d/\d)\b)");
+        std::smatch match;
+
+        // Replace mixed numbers first (e.g., 1 1/2 → 1½)
+        while (std::regex_search(qty, match, mixed_number_pattern)) {
+            std::string whole = match[1];
+            std::string frac = match[2];
+            auto it = ascii_to_unicode.find(frac);
+            if (it != ascii_to_unicode.end()) {
+                qty.replace(match.position(0), match.length(0), whole + it->second);
+            } else {
+                break;
+            }
+        }
+
+        // Replace standalone fractions (e.g., 1/2 → ½)
+        for (const auto& [ascii_frac, unicode_frac] : ascii_to_unicode) {
+            std::regex standalone_frac(R"(\b)" + ascii_frac + R"(\b)");
+            qty = std::regex_replace(qty, standalone_frac, unicode_frac);
+        }
+
+        return qty;
+    };
+
+    std::ostringstream oss;
+
+    for (const auto& ing : ingredients) {
+        std::string qty = ing.quantity;
+        std::string unit = ing.unit;
+        std::string name = ing.name;
+
+        trim(qty);
+        trim(unit);
+        trim(name);
+
+        qty = convert_to_unicode_fractions(qty);
+
+        for (const auto& [key, replacement] : unit_map) {
+            std::regex pattern("\\b" + key + "\\b", std::regex_constants::icase);
+            qty = std::regex_replace(qty, pattern, replacement);
+        }
+
+        if (!qty.empty() && !unit.empty() && !name.empty())
+            oss << qty << " " << unit << " " << name << "\n";
+        else if (!name.empty())
+            oss << name << "\n";
     }
 
     return oss.str();
@@ -360,3 +444,71 @@ std::vector<std::string> split_numbered_steps(const std::string& text) {
 
     return steps;
 }
+
+
+void clean_all_ingredients_in_recipes() {
+    std::unordered_map<std::string, std::string> unit_map = {
+        {"T", "tbsp"}, {"Tbsp", "tbsp"}, {"TBS", "tbsp"}, {"Tablespoon", "tbsp"},
+        {"tablespoons", "tbsp"}, {"tablespoon", "tbsp"}, {"t", "tsp"},
+        {"tsp", "tsp"}, {"Teaspoon", "tsp"}, {"teaspoons", "tsp"}, {"teaspoon", "tsp"},
+        {"C", "cup"}, {"Cup", "cup"}, {"cups", "cup"}, {"c", "cup"},
+        {"oz", "oz"}, {"ounce", "oz"}, {"ounces", "oz"},
+        {"ml", "mL"}, {"l", "L"}, {"g", "g"}, {"kg", "kg"}
+    };
+
+    std::unordered_map<std::string, std::string> ascii_to_unicode = {
+        {"1/4", "¼"}, {"1/2", "½"}, {"3/4", "¾"},
+        {"1/3", "⅓"}, {"2/3", "⅔"},
+        {"1/5", "⅕"}, {"2/5", "⅖"}, {"3/5", "⅗"}, {"4/5", "⅘"},
+        {"1/6", "⅙"}, {"5/6", "⅚"},
+        {"1/8", "⅛"}, {"3/8", "⅜"}, {"5/8", "⅝"}, {"7/8", "⅞"}
+    };
+
+    auto trim = [](std::string& s) {
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
+            return !std::isspace(ch);
+        }));
+        s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) {
+            return !std::isspace(ch);
+        }).base(), s.end());
+    };
+
+    auto convert_to_unicode_fractions = [&](std::string& qty) {
+        std::regex mixed_number_pattern(R"((\b\d+)\s+(\d/\d)\b)");
+        std::smatch match;
+
+        // Convert mixed numbers (e.g., "1 1/2" → "1½")
+        while (std::regex_search(qty, match, mixed_number_pattern)) {
+            std::string whole = match[1];
+            std::string frac = match[2];
+            auto it = ascii_to_unicode.find(frac);
+            if (it != ascii_to_unicode.end()) {
+                qty.replace(match.position(0), match.length(0), whole + it->second);
+            } else {
+                break;
+            }
+        }
+
+        // Convert standalone fractions (e.g., "1/2" → "½")
+        for (const auto& [ascii_frac, unicode_frac] : ascii_to_unicode) {
+            std::regex standalone_frac(R"(\b)" + ascii_frac + R"(\b)");
+            qty = std::regex_replace(qty, standalone_frac, unicode_frac);
+        }
+    };
+
+    for (Recipe& recipe : recipes) {
+        for (Ingredient& ing : recipe.ingredients) {
+            trim(ing.quantity);
+            trim(ing.unit);
+            trim(ing.name);
+
+            convert_to_unicode_fractions(ing.quantity);
+
+            for (const auto& [key, replacement] : unit_map) {
+                std::regex pattern("\\b" + key + "\\b", std::regex_constants::icase);
+                ing.unit = std::regex_replace(ing.unit, pattern, replacement);
+            }
+        }
+    }
+}
+

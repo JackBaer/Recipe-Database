@@ -19,6 +19,8 @@ struct Recipe {
 extern std::vector<Recipe> recipes;
 extern std::vector<std::string> availableUnits;
 
+void clean_all_ingredients_in_recipes();
+
 std::vector<Ingredient> parse_ingredients(const std::string& ingredients_text);
 std::string clean_and_format_ingredients(const std::vector<Ingredient>& ingredients); 
 std::string clean_recipe_directions(const std::string& input_text);
