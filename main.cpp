@@ -193,6 +193,7 @@ void RenderSearchWindow() {
     static char ingredientQuantity[32] = "";
     static char recipeTime[32] = "";
     static int selected_unit_idx = 0;
+    static bool include_less_equal = false; // new toggle
 
     if (ImGui::TreeNode("Additional Filters")) {
         if (ImGui::BeginChild("FilterChild", ImVec2(-FLT_MIN, 0), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
@@ -214,7 +215,8 @@ void RenderSearchWindow() {
             }
 
             ImGui::InputText("Recipe Time", recipeTime, IM_ARRAYSIZE(recipeTime));
-            ImGui::EndChild();
+            ImGui::Checkbox("Include recipes with lesser quantity", &include_less_equal);
+	    ImGui::EndChild();
         }
         ImGui::TreePop();
     }
@@ -269,48 +271,65 @@ void RenderSearchWindow() {
 
 	// Build the filtered list
 	std::vector<std::pair<std::string, int>> currentRecipes;
-	currentRecipes.clear();
+	std::vector<std::pair<std::string, std::pair<int, double>>> sortedMatches;
+
+	double targetQty = filterQuantity.empty() ? -1.0 : parse_mixed_fraction(filterQuantity);
+
 
 	for (int i = 0; i < recipes.size(); ++i) {
 	    std::string loweredName = recipes[i].name;
 	    std::transform(loweredName.begin(), loweredName.end(), loweredName.begin(), [](unsigned char c){ return std::tolower(c); });
 
-	    // If current recipe matches name filter, keep checking other filters
-	    if(loweredName.find(currentText) == std::string::npos) {
-		continue;
-	    }
-	    // If other filters are empty, then just add recipe to list
-	    if(filterIngredient.empty() && filterQuantity.empty() && (filterUnit == " ")) {
-		currentRecipes.emplace_back(recipes[i].name, i);
-	    }
-	    else {
-		    bool passesIngredientFilter = false;
-		    // Iterate through every ingredient to see if there is a match with filter
-		    for(const auto& ing : recipes[i].ingredients) {
-			std::string name = ing.name;
-			std::string qty = ing.quantity;
-			std::string unit = ing.unit;
-			normalize(name);
-			normalize(qty);
-			normalize(unit);
-			
-			std::regex unicode_mixed_number_pattern(R"((\d)\s+([¼½¾⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]))");
-			qty = std::regex_replace(qty, unicode_mixed_number_pattern, "$1$2");
+	    if (loweredName.find(currentText) == std::string::npos) continue;
 
-			// Check if recipe fulfills all connditions 
-			bool matchIngredient = filterIngredient.empty() || name.find(filterIngredient) != std::string::npos;
+	    if (filterIngredient.empty() && filterQuantity.empty() && (filterUnit == " ")) {
+		currentRecipes.emplace_back(recipes[i].name, i);
+	    } else {
+		bool matchFound = false;
+		double bestQty = -1.0;
+
+		for (const auto& ing : recipes[i].ingredients) {
+		    std::string name = ing.name;
+		    std::string qty = ing.quantity;
+		    std::string unit = ing.unit;
+		    normalize(name); normalize(qty); normalize(unit);
+
+		    double ingQty = qty.empty() ? -1.0 : parse_mixed_fraction(qty);
+
+		    bool matchIngredient = filterIngredient.empty() || name.find(filterIngredient) != std::string::npos;
+		    bool matchUnit = (filterUnit == " ") || unit.find(filterUnit) != std::string::npos;
+
+		    if (include_less_equal) {
+			if (matchIngredient && matchUnit && targetQty >= 0 && ingQty <= targetQty) {
+			    matchFound = true;
+			    bestQty = std::max(bestQty, ingQty); // track best match for sort
+			}
+		    } else {
 			bool matchQuantity = filterQuantity.empty() || qty.find(filterQuantity) != std::string::npos;
-			bool matchUnit = (filterUnit == " ") || unit.find(filterUnit) != std::string::npos;
-			if(matchIngredient && matchQuantity && matchUnit) {
-			    passesIngredientFilter = true;
-			    break;
+			if (matchIngredient && matchQuantity && matchUnit) {
+			    matchFound = true;
+			    bestQty = ingQty;
 			}
 		    }
+		}
 
-		    // If recipe has a match with ingredient filters, add it to list
-		    if(passesIngredientFilter) {
+		if (matchFound) {
+		    if (include_less_equal)
+			sortedMatches.emplace_back(recipes[i].name, std::make_pair(i, bestQty));
+		    else
 			currentRecipes.emplace_back(recipes[i].name, i);
-		    }
+		}
+	    }
+	}
+
+	// If in inequality mode, sort by matched quantity descending
+	if (include_less_equal) {
+	    std::sort(sortedMatches.begin(), sortedMatches.end(),
+		      [](const auto& a, const auto& b) {
+			  return a.second.second > b.second.second;
+		      });
+	    for (const auto& entry : sortedMatches) {
+		currentRecipes.emplace_back(entry.first, entry.second.first);
 	    }
 	}
 

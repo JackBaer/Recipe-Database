@@ -8,6 +8,8 @@
 #include <regex>
 #include <unordered_map>
 #include <cctype>
+#include <cstdlib>
+#include <map>
 #include <set>
 
 #include "data.hpp"
@@ -509,6 +511,90 @@ void clean_all_ingredients_in_recipes() {
                 ing.unit = std::regex_replace(ing.unit, pattern, replacement);
             }
         }
+    }
+}
+
+double parse_mixed_fraction(const std::string& input) {
+    std::string s = input;
+
+    // Trim leading and trailing spaces but keep spaces inside intact
+    auto trim = [](std::string& str) {
+        str.erase(str.begin(), std::find_if(str.begin(), str.end(),
+            [](unsigned char ch) { return !std::isspace(ch); }));
+        str.erase(std::find_if(str.rbegin(), str.rend(),
+            [](unsigned char ch) { return !std::isspace(ch); }).base(), str.end());
+    };
+    trim(s);
+
+    // Unicode fraction map (unchanged)
+    static const std::map<std::string, double> unicodeFractions = {
+        {"½", 0.5}, {"⅓", 1.0 / 3}, {"⅔", 2.0 / 3},
+        {"¼", 0.25}, {"¾", 0.75}, {"⅕", 0.2}, {"⅖", 0.4},
+        {"⅗", 0.6}, {"⅘", 0.8}, {"⅙", 1.0 / 6}, {"⅚", 5.0 / 6},
+        {"⅛", 0.125}, {"⅜", 0.375}, {"⅝", 0.625}, {"⅞", 0.875}
+    };
+
+    // 1. Check for integer + unicode fraction (e.g., "1½")
+    for (const auto& [symbol, value] : unicodeFractions) {
+        size_t pos = s.find(symbol);
+        if (pos != std::string::npos) {
+            std::string wholePart = s.substr(0, pos);
+            try {
+                double whole = wholePart.empty() ? 0.0 : std::stod(wholePart);
+                return whole + value;
+            } catch (...) {
+                return value;
+            }
+        }
+    }
+
+    // 2. Check for mixed ASCII fraction (e.g., "1 1/2")
+    size_t spacePos = s.find(' ');
+    size_t slashPos = s.find('/');
+
+    if (slashPos != std::string::npos) {
+        double whole = 0.0;
+        int numerator = 0;
+        int denominator = 1;
+
+        // Extract whole number if there is a space before fraction
+        if (spacePos != std::string::npos && spacePos < slashPos) {
+            try {
+                whole = std::stod(s.substr(0, spacePos));
+            } catch (...) {
+                whole = 0.0;
+            }
+            // fraction part after space
+            std::string fracPart = s.substr(spacePos + 1);
+            size_t slashInFrac = fracPart.find('/');
+            if (slashInFrac != std::string::npos) {
+                try {
+                    numerator = std::stoi(fracPart.substr(0, slashInFrac));
+                    denominator = std::stoi(fracPart.substr(slashInFrac + 1));
+                } catch (...) {
+                    numerator = 0;
+                    denominator = 1;
+                }
+            }
+        } else {
+            // no whole number, just fraction "1/2"
+            try {
+                numerator = std::stoi(s.substr(0, slashPos));
+                denominator = std::stoi(s.substr(slashPos + 1));
+            } catch (...) {
+                numerator = 0;
+                denominator = 1;
+            }
+        }
+        if (denominator == 0) denominator = 1;
+        return whole + static_cast<double>(numerator) / denominator;
+    }
+
+    // 3. Just try to parse as a normal double (integer)
+    try {
+        return std::stod(s);
+    } catch (...) {
+        return -1.0;
     }
 }
 
