@@ -20,6 +20,7 @@
 #include <map>
 #include <algorithm> // for std::transform
 #include <cctype>    // for std::tolower
+#include <regex>
 
 #include "data.hpp" // outsourced helper methods for parsing CSV data
 
@@ -235,6 +236,37 @@ void RenderSearchWindow() {
 	normalize(filterQuantity);
 	normalize(filterUnit);
 
+	// Convert ASCII fraction in filterQuantity to Unicode
+	std::unordered_map<std::string, std::string> ascii_to_unicode = {
+	    {"1/4", "¼"}, {"1/2", "½"}, {"3/4", "¾"},
+	    {"1/3", "⅓"}, {"2/3", "⅔"},
+	    {"1/5", "⅕"}, {"2/5", "⅖"}, {"3/5", "⅗"}, {"4/5", "⅘"},
+	    {"1/6", "⅙"}, {"5/6", "⅚"},
+	    {"1/8", "⅛"}, {"3/8", "⅜"}, {"5/8", "⅝"}, {"7/8", "⅞"}
+	};
+
+	// Handle "1 1/2" → "1½"
+	std::regex mixed_number_pattern(R"((\b\d+)\s+(\d/\d)\b)");
+	std::smatch match;
+	while (std::regex_search(filterQuantity, match, mixed_number_pattern)) {
+	    std::string whole = match[1];
+	    std::string frac = match[2];
+	    auto it = ascii_to_unicode.find(frac);
+	    if (it != ascii_to_unicode.end()) {
+		filterQuantity = filterQuantity.substr(0, match.position()) +
+				 whole + it->second +
+				 filterQuantity.substr(match.position() + match.length());
+	    } else {
+		break;
+	    }
+	}
+
+	// Handle standalone "1/2" → "½"
+	for (const auto& [ascii_frac, unicode_frac] : ascii_to_unicode) {
+	    std::regex standalone_frac(R"(\b)" + ascii_frac + R"(\b)");
+	    filterQuantity = std::regex_replace(filterQuantity, standalone_frac, unicode_frac);
+	}
+
 	// Build the filtered list
 	std::vector<std::pair<std::string, int>> currentRecipes;
 	currentRecipes.clear();
@@ -262,6 +294,9 @@ void RenderSearchWindow() {
 			normalize(qty);
 			normalize(unit);
 			
+			std::regex unicode_mixed_number_pattern(R"((\d)\s+([¼½¾⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]))");
+			qty = std::regex_replace(qty, unicode_mixed_number_pattern, "$1$2");
+
 			// Check if recipe fulfills all connditions 
 			bool matchIngredient = filterIngredient.empty() || name.find(filterIngredient) != std::string::npos;
 			bool matchQuantity = filterQuantity.empty() || qty.find(filterQuantity) != std::string::npos;
