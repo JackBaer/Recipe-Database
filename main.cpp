@@ -1,6 +1,9 @@
 #define IMGUI_DEFINE_MAKE_ENUMS  // Optional for enums, safe to include
 #define IMGUI_HAS_DOCK           // Enable DockBuilder API (older ImGui versions)
+
+#ifndef IMGUI_ENABLE_DOCKING
 #define IMGUI_ENABLE_DOCKING     // ✅ Required in recent versions
+#endif
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -27,6 +30,7 @@
 #include "mainMenu.h" // GUI methods for main menu
 #include "exportMenu.h" // GUI methods for export menu
 #include "recipeCreateMenu.h" // GUI methods for recipe creator window
+#include "pdfExporter.h" // Logic for exporting recipe into a PDF file
 
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <SDL3/SDL_opengles2.h>

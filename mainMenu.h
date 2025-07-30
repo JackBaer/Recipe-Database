@@ -23,6 +23,7 @@
 
 #include "data.hpp" // outsourced helper methods for parsing CSV data
 #include "appState.h" // container struct for containing all persistent data
+#include "pdfExporter.h"
 
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <SDL3/SDL_opengles2.h>
