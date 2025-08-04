@@ -87,3 +87,4 @@ $(EXE): $(OBJS)
 
 clean:
 	rm -f $(EXE) $(OBJS)
+	rm -f *.pdf *.png

@@ -598,3 +598,47 @@ double parse_mixed_fraction(const std::string& input) {
     }
 }
 
+void AppendRecipeToCSV(const std::string& filename,
+                       const std::string& name,
+                       const std::string& totalTime,
+                       const std::string& ingredients,
+                       const std::string& directions)
+{
+    std::ofstream file(filename, std::ios::app);
+    if (!file.is_open()) {
+        // Handle error
+        return;
+    }
+
+    // Escape or sanitize commas/newlines in data as needed.
+    // For simplicity, we'll quote fields with potential commas/newlines.
+    auto escapeCSV = [](const std::string& field) -> std::string {
+        std::string escaped = field;
+        if (field.find(',') != std::string::npos || field.find('\n') != std::string::npos) {
+            // Escape double quotes by doubling them
+            size_t pos = 0;
+            while ((pos = escaped.find('"', pos)) != std::string::npos) {
+                escaped.insert(pos, 1, '"');
+                pos += 2;
+            }
+            escaped = "\"" + escaped + "\"";
+        }
+        return escaped;
+    };
+
+    file << escapeCSV(name) << ","
+         << escapeCSV(totalTime) << ","
+         << escapeCSV(ingredients) << ","
+         << escapeCSV(directions) << "\n";
+}
+
+std::string SerializeIngredients(const std::vector<Ingredient>& ingredients) {
+    std::string result;
+    for (size_t i = 0; i < ingredients.size(); i++) {
+        const auto& ing = ingredients[i];
+        result += ing.quantity + " " + ing.unit + " " + ing.name;
+        if (i + 1 < ingredients.size())
+            result += "; "; // separator between ingredients
+    }
+    return result;
+}

@@ -13,10 +13,9 @@
 #include "appState.h"
 #include "data.hpp"
 
-void GeneratePDF(const std::string& title, const std::vector<Ingredient>& ingredients, const std::string& directions);
-void ConvertPDFToPNG(const std::string& pdfPath, const std::string& outputPrefix);
 GLuint LoadTextureGL(const char* filename, int* out_width, int* out_height);
 
-void SaveRecipePDF(const AppState& appState);
+void SaveRecipePDF(const AppState& appState, const std::string& filename);
+void ConvertPDFToPNG(const std::string& pdfPath, const std::string& outputPrefix);
 
 #endif

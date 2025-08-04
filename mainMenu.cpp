@@ -232,7 +232,6 @@ void ShowMainMenuPage(AppState& appState) {
     ImGui::Begin("Main Menu Controls");
 
     if (ImGui::Button("Export Recipe as PDF")) {
-        GeneratePDF(appState.current_recipe, appState.current_ingredients, appState.current_directions);
 	ConvertPDFToPNG("recipe_export.pdf", "preview"); // Creates preview.png
 							   //
 	appState.currentPage = Page::ExportRecipe;  // Navigate to preview screen

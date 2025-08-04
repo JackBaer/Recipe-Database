@@ -130,7 +130,12 @@ void ShowDockSpace(Page currentPage) {
         }
         else if (currentPage == Page::ExportRecipe) {
             // Reserved for future layout
-        }
+            ImGuiID left, right;
+	    ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.5f, &left, &right);
+
+	    ImGui::DockBuilderDockWindow("Export Window", left);
+	    ImGui::DockBuilderDockWindow("Display Window", right);
+	}
 
         ImGui::DockBuilderFinish(dockspace_id);
     }

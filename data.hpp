@@ -30,3 +30,11 @@ double parse_mixed_fraction(const std::string& str);
 void read_recipes_from_csv(const std::string& filename);
 
 void load_recipes(const std::string& filename);
+
+void AppendRecipeToCSV(const std::string& filename,
+                       const std::string& name,
+                       const std::string& totalTime,
+                       const std::string& ingredients,
+                       const std::string& directions);
+
+std::string SerializeIngredients(const std::vector<Ingredient>& ingredients);
