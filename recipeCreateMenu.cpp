@@ -1,5 +1,52 @@
 #include "recipeCreateMenu.h"
 
+std::string EscapeCSVField(const std::string& input) {
+    std::string escaped = "\"";
+    for (char c : input) {
+        if (c == '"') {
+            escaped += "\"\"";  // escape double quotes
+        } else {
+            escaped += c;
+        }
+    }
+    escaped += "\"";
+    return escaped;
+}
+
+void AppendRecipeToCSV(const Recipe& recipe, const std::string& filename) {
+    std::ofstream file(filename, std::ios::app);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open recipe CSV for appending.\n";
+        return;
+    }
+
+    // Build ingredient string
+    std::ostringstream ingStream;
+    for (size_t i = 0; i < recipe.ingredients.size(); ++i) {
+        const auto& ing = recipe.ingredients[i];
+        ingStream << ing.quantity << "~" << ing.unit << "~" << ing.name;
+        if (i < recipe.ingredients.size() - 1) ingStream << "|";
+    }
+
+    // Initialize 15 columns (0-indexed, so column 1 = index 0)
+    std::vector<std::string> columns(15, "");
+
+    columns[1] = EscapeCSVField(recipe.name);            // Column 2
+    columns[4] = EscapeCSVField(recipe.time + "mins");   // Column 5
+    columns[7] = EscapeCSVField(ingStream.str());        // Column 8
+    columns[8] = EscapeCSVField(recipe.directions);      // Column 9
+
+    // Output the full line with 14 commas (15 columns)
+    for (size_t i = 0; i < columns.size(); ++i) {
+        file << columns[i];
+        if (i < columns.size() - 1)
+            file << ",";
+    }
+    file << "\n";
+
+    file.close();
+}
+
 void ShowRecipeCreatePage(AppState& appState) {
 
     ImGui::Begin("Recipe Creator Window");
@@ -89,17 +136,35 @@ void ShowRecipeCreatePage(AppState& appState) {
     ImGui::InputTextMultiline("Directions", directions, IM_ARRAYSIZE(directions), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8));
 
     if (ImGui::Button("Add Recipe")) {
-        // Convert newIngredients vector to a single string or store in your Recipe directly
-        // Append to CSV and add to your recipes vector
-        // Clear everything
-        showAddRecipeWindow = false;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel")) {
-        showAddRecipeWindow = false;
+	    // Construct recipe from inputs
+	    Recipe newRecipe;
+	    newRecipe.name = recipeName;
+	    newRecipe.time = totalTime;
+	    newRecipe.ingredients = newIngredients;
+	    newRecipe.directions = directions;
+
+	    // Update app state
+	    //appState.recipes.push_back(newRecipe);
+
+	    // Save to CSV
+	    AppendRecipeToCSV(newRecipe, "recipes.csv");  // adjust path if needed
+
+	    // Clear form fields
+	    recipeName[0] = '\0';
+	    totalTime[0] = '\0';
+	    directions[0] = '\0';
+	    newIngredients.clear();
+
+	    showAddRecipeWindow = false;
     }
 
-    ImGui::End();
+    ImGui::SameLine();
+
+    if (ImGui::Button("Cancel")) {
+	showAddRecipeWindow = false;
+    }
+
+	    ImGui::End();
 	}
     }
    
