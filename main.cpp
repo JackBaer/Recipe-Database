@@ -122,19 +122,34 @@ void ShowDockSpace(Page currentPage) {
             ImGuiID left, right;
             ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.5f, &left, &right);
 
+	    // Now split right into top and bottom
+	    ImGuiID topRight, bottomRight;
+	    ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.07f, &bottomRight, &topRight);
+
             ImGui::DockBuilderDockWindow("Search Window", left);
-            ImGui::DockBuilderDockWindow("Display Window", right);
-        }
+            ImGui::DockBuilderDockWindow("Display Window", topRight);
+	    ImGui::DockBuilderDockWindow("Main Menu Controls", bottomRight);
+	}
         else if (currentPage == Page::RecipeCreate) {
             // Reserved for future layout
+	    ImGuiID top, bottom;
+            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Up, 0.87f, &top, &bottom);
+
+            ImGui::DockBuilderDockWindow("Recipe Creator Window", top);
+	    ImGui::DockBuilderDockWindow("Main Menu Controls", bottom);
         }
         else if (currentPage == Page::ExportRecipe) {
             // Reserved for future layout
             ImGuiID left, right;
 	    ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.5f, &left, &right);
+	    
+	    // Now split right into top and bottom
+	    ImGuiID topRight, bottomRight;
+	    ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.07f, &bottomRight, &topRight);
 
 	    ImGui::DockBuilderDockWindow("Export Window", left);
-	    ImGui::DockBuilderDockWindow("Display Window", right);
+	    ImGui::DockBuilderDockWindow("Display Window", topRight);
+	    ImGui::DockBuilderDockWindow("Main Menu Controls", bottomRight);
 	}
 
         ImGui::DockBuilderFinish(dockspace_id);
