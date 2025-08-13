@@ -24,17 +24,40 @@ void AppendRecipeToCSV(const Recipe& recipe, const std::string& filename) {
     std::ostringstream ingStream;
     for (size_t i = 0; i < recipe.ingredients.size(); ++i) {
         const auto& ing = recipe.ingredients[i];
-        ingStream << ing.quantity << "~" << ing.unit << "~" << ing.name;
-        if (i < recipe.ingredients.size() - 1) ingStream << "|";
+        ingStream << ing.quantity << " " << ing.unit << " " << ing.name;
+        if (i < recipe.ingredients.size() - 1) ingStream << ", ";
     }
+
+    // Format directions string
+    // Remove leading numbers + period/parenthesis + spaces
+    // Matches: "1. ", "23. ", "1) ", etc.
+    std::regex stepNumberPattern(R"(^\s*\d+[\.\)]\s*)");
+    std::stringstream inputStream(recipe.directions);
+    std::stringstream outputStream;
+
+    std::string line;
+
+    while (std::getline(inputStream, line)) {
+        // Remove step number if present at start of line
+        line = std::regex_replace(line, stepNumberPattern, "");
+
+        // Trim whitespace at both ends
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+
+	outputStream << line;
+	outputStream << ". ";
+    }
+
+    std::string cleanedDirections = outputStream.str();
 
     // Initialize 15 columns (0-indexed, so column 1 = index 0)
     std::vector<std::string> columns(15, "");
 
     columns[1] = EscapeCSVField(recipe.name);            // Column 2
-    columns[4] = EscapeCSVField(recipe.time + "mins");   // Column 5
+    columns[4] = EscapeCSVField(recipe.time + " mins");   // Column 5
     columns[7] = EscapeCSVField(ingStream.str());        // Column 8
-    columns[8] = EscapeCSVField(recipe.directions);      // Column 9
+    columns[8] = EscapeCSVField(cleanedDirections);      // Column 9
 
     // Output the full line with 14 commas (15 columns)
     for (size_t i = 0; i < columns.size(); ++i) {

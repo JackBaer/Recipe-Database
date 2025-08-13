@@ -7,6 +7,7 @@
 #include <iostream>
 #include <ostream>
 #include <fstream>
+#include <regex>
 
 void ShowRecipeCreatePage(AppState& appState);
 
