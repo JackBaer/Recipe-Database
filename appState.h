@@ -16,6 +16,7 @@ struct AppState {
 	std::string current_recipe;
 	std::vector<Ingredient> current_ingredients;
 	std::string current_directions = "";
+	Page previousPage;
 	Page currentPage = Page::MainMenu;
 	ImFont* font_normal = nullptr;
 	ImFont* font_large = nullptr;

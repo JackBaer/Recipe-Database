@@ -296,17 +296,29 @@ int main(int argc, char** argv)
 	// Build dockspace
 	ShowDockSpace(appState.currentPage);
 
+	// Pick what GUI elements to render based on current page
 	switch (appState.currentPage) {
 	    case Page::MainMenu:
 		ShowMainMenuPage(appState);
 		break;
 	    case Page::RecipeCreate:
-		ShowRecipeCreatePage(appState);  // You can leave this empty for now
+		ShowRecipeCreatePage(appState);
 		break;
 	    case Page::ExportRecipe:
-		ShowExportPage(appState);        // Empty for now
+		ShowExportPage(appState);       
 		break;
 	}
+	
+	// If returning to main menu, reload recipes to ensure list is up-to-date
+	if((appState.previousPage != Page::MainMenu) && (appState.currentPage == Page::MainMenu)) {
+		recipes.clear();
+		read_recipes_from_csv(csv_path);
+		clean_all_ingredients_in_recipes();
+
+	}
+
+	// Track pages across frames to look for change
+	appState.previousPage = appState.currentPage;
 
         // Rendering
         ImGui::Render();

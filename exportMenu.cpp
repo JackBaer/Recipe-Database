@@ -68,7 +68,7 @@ void ShowExportPage(AppState& appState) {
     ImGui::Begin("Main Menu Controls");
 
     if (ImGui::Button("Back to Main Menu")) {
-        appState.currentPage = Page::MainMenu;
+	appState.currentPage = Page::MainMenu;
     }
 
     ImGui::SameLine();
